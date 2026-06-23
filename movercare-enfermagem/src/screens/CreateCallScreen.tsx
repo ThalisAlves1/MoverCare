@@ -19,7 +19,7 @@ interface CreateCallScreenProps {
   onCreated: () => void;
 }
 
-const transportTypes: TransportType[] = ['MACA', 'CADEIRA_RODAS', 'ACOMPANHAMENTO', 'OUTRO'];
+const transportTypes: TransportType[] = ['MACA', 'CADEIRA_RODAS', 'ACOMPANHAMENTO', "INCUBADORA", "BERÇO_COMUM", "BERÇO_AQUECIDO", 'OUTRO'];
 const priorities: CallPriority[] = ['NORMAL', 'URGENTE', 'CRITICO'];
 const risks: TransportRisk[] = ['BAIXO', 'MEDIO', 'ALTO'];
 const infectionPrecautions = [
@@ -35,6 +35,9 @@ function labelTransportType(value: TransportType) {
     MACA: 'Maca',
     CADEIRA_RODAS: 'Cadeira de rodas',
     ACOMPANHAMENTO: 'Acompanhamento',
+    INCUBADORA: 'Incubadora',
+    BERÇO_COMUM: 'Berço comum',
+    BERÇO_AQUECIDO: 'Berço aquecido',
     OUTRO: 'Outro',
   };
 
@@ -746,6 +749,20 @@ export function CreateCallScreen({ sectors, onCreated }: CreateCallScreenProps) 
       </style>
 
       <form className={emergencyMode ? "panel request-form emergency-form-active" : "panel request-form"} onSubmit={handleSubmit}>
+        <div className={emergencyMode ? 'emergency-mode-top active' : 'emergency-mode-top'}>
+          <div>
+            <span><AlertTriangle size={18} /> Modo emergência</span>
+            <strong>{emergencyMode ? 'Emergência ativada' : 'Atalho para chamado crítico'}</strong>
+            <p>Preenche automaticamente maca, prioridade crítica, risco alto e checklist.</p>
+          </div>
+
+          {emergencyMode ? (
+            <button type="button" onClick={deactivateEmergencyMode}>Desativar emergência</button>
+          ) : (
+            <button type="button" onClick={activateEmergencyMode}>Ativar emergência</button>
+          )}
+        </div>
+
         <div className="form-title">
           <span className="section-kicker"><ClipboardPlus size={14} /> Solicitação de transporte</span>
           <h2>Dados do chamado</h2>

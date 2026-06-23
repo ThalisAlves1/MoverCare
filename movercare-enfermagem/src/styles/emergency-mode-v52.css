@@ -1,4 +1,86 @@
 
+/* v54 - correção: botão de emergência sempre visível no topo */
+.emergency-mode-top {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: space-between !important;
+  gap: 16px !important;
+  width: 100% !important;
+  margin: 0 0 20px !important;
+  padding: 18px !important;
+  border-radius: 24px !important;
+  border: 2px solid #fecaca !important;
+  background:
+    radial-gradient(circle at 0% 0%, rgba(239, 68, 68, .16), transparent 35%),
+    linear-gradient(135deg, #fff7f7, #ffffff) !important;
+  box-shadow: 0 18px 44px rgba(180, 35, 24, .12) !important;
+}
+
+.emergency-mode-top.active {
+  border-color: #b42318 !important;
+  background:
+    radial-gradient(circle at 0% 0%, rgba(180, 35, 24, .22), transparent 36%),
+    linear-gradient(135deg, #fef2f2, #ffffff) !important;
+}
+
+.emergency-mode-top span {
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 8px !important;
+  margin-bottom: 6px !important;
+  color: #b42318 !important;
+  font-size: 12px !important;
+  font-weight: 900 !important;
+  text-transform: uppercase !important;
+  letter-spacing: .08em !important;
+}
+
+.emergency-mode-top strong {
+  display: block !important;
+  margin-bottom: 4px !important;
+  color: #101828 !important;
+  font-size: 20px !important;
+  letter-spacing: -.03em !important;
+}
+
+.emergency-mode-top p {
+  margin: 0 !important;
+  color: #667085 !important;
+  font-size: 14px !important;
+  line-height: 1.4 !important;
+}
+
+.emergency-mode-top button {
+  min-height: 46px !important;
+  padding: 0 18px !important;
+  border: 0 !important;
+  border-radius: 999px !important;
+  background: #b42318 !important;
+  color: #ffffff !important;
+  font-weight: 900 !important;
+  white-space: nowrap !important;
+  box-shadow: 0 14px 30px rgba(180, 35, 24, .22) !important;
+}
+
+.emergency-mode-top.active button {
+  background: #ffffff !important;
+  color: #b42318 !important;
+  border: 1px solid #fecaca !important;
+  box-shadow: none !important;
+}
+
+@media (max-width: 720px) {
+  .emergency-mode-top {
+    flex-direction: column !important;
+    align-items: stretch !important;
+  }
+
+  .emergency-mode-top button {
+    width: 100% !important;
+  }
+}
+
+
 /* v52 - Modo emergência no formulário da Enfermagem */
 .emergency-mode-card {
   display: flex;
@@ -111,11 +193,6 @@
 .emergency-form-active input,
 .emergency-form-active textarea {
   border-color: #dcecef;
-}
-
-.emergency-form-active label:has(select[value="CRITICO"]),
-.emergency-form-active label:has(select[value="ALTO"]) {
-  color: #b42318;
 }
 
 @keyframes emergencyPulse {
