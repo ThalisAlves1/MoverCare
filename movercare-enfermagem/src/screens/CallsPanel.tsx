@@ -54,15 +54,28 @@ const pageSizeOptions = [5, 7, 10, 15, 25];
 
 function statusLabel(status: string) {
   const labels: Record<string, string> = {
-    ABERTO: 'Aberto',
-    AGUARDANDO_MAQUEIRO: 'Aguardando',
-    ENVIADO: 'Aguardando',
-    ACEITO: 'Aceito',
-    A_CAMINHO_ORIGEM: 'Aceito',
-    EM_TRANSITO: 'Em trânsito',
-    CONCLUIDO: 'Concluído',
-    CANCELADO: 'Cancelado',
-    ATRASADO: 'Atrasado',
+    MACA: 'Maca',
+    CADEIRA_RODAS: 'Cadeira de rodas',
+    ACOMPANHAMENTO: 'Acompanhamento',
+    AMBULANTE: 'Paciente deambulando',
+    LEITO_HOSPITALAR: 'Leito hospitalar',
+    POLTRONA: 'Poltrona',
+    INCUBADORA: 'Incubadora',
+    BERCO_COMUM: 'Berço comum',
+    BERCO_AQUECIDO: 'Berço aquecido',
+    MACA_BARIATRICA: 'Maca bariátrica',
+    CADEIRA_BARIATRICA: 'Cadeira bariátrica',
+    PRANCHA_RIGIDA: 'Prancha rígida',
+    ISOLAMENTO: 'Isolamento',
+    OXIGENIO: 'Com oxigênio',
+    MONITORIZADO: 'Monitorizado',
+    BOMBA_INFUSAO: 'Com bomba de infusão',
+    VENTILACAO_MECANICA: 'Ventilação mecânica',
+    UTI_MOVEL: 'UTI móvel interna',
+    NEONATAL: 'Neonatal',
+    PEDIATRICO: 'Pediátrico',
+    OBESO_BARIATRICO: 'Obeso / bariátrico',
+    OUTRO: 'Outro',
   };
   return labels[status] ?? status;
 }

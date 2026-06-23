@@ -19,7 +19,7 @@ interface CreateCallScreenProps {
   onCreated: () => void;
 }
 
-const transportTypes: TransportType[] = ['MACA', 'CADEIRA_RODAS', 'ACOMPANHAMENTO', "INCUBADORA", "BERÇO_COMUM", "BERÇO_AQUECIDO", 'OUTRO'];
+const transportTypes: TransportType[] = ['MACA', 'CADEIRA_RODAS', 'ACOMPANHAMENTO', 'AMBULANTE', 'LEITO_HOSPITALAR', 'POLTRONA', 'INCUBADORA', 'BERCO_COMUM', 'BERCO_AQUECIDO', 'MACA_BARIATRICA', 'CADEIRA_BARIATRICA', 'PRANCHA_RIGIDA', 'ISOLAMENTO', 'OXIGENIO', 'MONITORIZADO', 'BOMBA_INFUSAO', 'VENTILACAO_MECANICA', 'UTI_MOVEL', 'NEONATAL', 'PEDIATRICO', 'OBESO_BARIATRICO', 'OUTRO'];
 const priorities: CallPriority[] = ['NORMAL', 'URGENTE', 'CRITICO'];
 const risks: TransportRisk[] = ['BAIXO', 'MEDIO', 'ALTO'];
 const infectionPrecautions = [
@@ -35,9 +35,24 @@ function labelTransportType(value: TransportType) {
     MACA: 'Maca',
     CADEIRA_RODAS: 'Cadeira de rodas',
     ACOMPANHAMENTO: 'Acompanhamento',
+    AMBULANTE: 'Paciente deambulando',
+    LEITO_HOSPITALAR: 'Leito hospitalar',
+    POLTRONA: 'Poltrona',
     INCUBADORA: 'Incubadora',
-    BERÇO_COMUM: 'Berço comum',
-    BERÇO_AQUECIDO: 'Berço aquecido',
+    BERCO_COMUM: 'Berço comum',
+    BERCO_AQUECIDO: 'Berço aquecido',
+    MACA_BARIATRICA: 'Maca bariátrica',
+    CADEIRA_BARIATRICA: 'Cadeira bariátrica',
+    PRANCHA_RIGIDA: 'Prancha rígida',
+    ISOLAMENTO: 'Isolamento',
+    OXIGENIO: 'Com oxigênio',
+    MONITORIZADO: 'Monitorizado',
+    BOMBA_INFUSAO: 'Com bomba de infusão',
+    VENTILACAO_MECANICA: 'Ventilação mecânica',
+    UTI_MOVEL: 'UTI móvel interna',
+    NEONATAL: 'Neonatal',
+    PEDIATRICO: 'Pediátrico',
+    OBESO_BARIATRICO: 'Obeso / bariátrico',
     OUTRO: 'Outro',
   };
 

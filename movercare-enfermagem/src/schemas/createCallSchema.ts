@@ -7,7 +7,7 @@ export const createCallSchema = z.object({
   originSectorId: z.string().min(1, 'Selecione o setor de origem'),
   destinationSectorId: z.string().min(1, 'Selecione o setor de destino'),
 
-  transportType: z.enum(['MACA', 'CADEIRA_RODAS', 'ACOMPANHAMENTO', 'OUTRO'], {
+  transportType: z.enum(['MACA', 'CADEIRA_RODAS', 'ACOMPANHAMENTO', 'AMBULANTE', 'LEITO_HOSPITALAR', 'POLTRONA', 'INCUBADORA', 'BERCO_COMUM', 'BERCO_AQUECIDO', 'MACA_BARIATRICA', 'CADEIRA_BARIATRICA', 'PRANCHA_RIGIDA', 'ISOLAMENTO', 'OXIGENIO', 'MONITORIZADO', 'BOMBA_INFUSAO', 'VENTILACAO_MECANICA', 'UTI_MOVEL', 'NEONATAL', 'PEDIATRICO', 'OBESO_BARIATRICO', 'OUTRO'], {
     message: 'Selecione o tipo de transporte',
   }),
 
