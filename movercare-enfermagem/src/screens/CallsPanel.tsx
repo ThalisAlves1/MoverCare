@@ -244,8 +244,12 @@ function CallDetailsModal({ call, sectors, onClose, onRecallCreated }: { call: T
       if (!recallForm.originSectorId || !recallForm.destinationSectorId) throw new Error('Informe origem e destino da rechamada.');
       if (recallForm.originSectorId === recallForm.destinationSectorId) throw new Error('Origem e destino da rechamada não podem ser iguais.');
 
+      const bedMatch = String(typedCall.patient_code ?? '').match(/Leito\s+([^|]+)/i);
+      const recallBedNumber = bedMatch?.[1]?.trim() || 'N/I';
+
       const newCall: CreateCallForm = {
         patientCode: typedCall.patient_code ?? '',
+        bedNumber: recallBedNumber,
         originSectorId: recallForm.originSectorId,
         destinationSectorId: recallForm.destinationSectorId,
         transportType: typedCall.transport_type,

@@ -27,7 +27,7 @@ export const createCallSchema = z.object({
   teamConfirmed: z.boolean(),
   equipmentConfirmed: z.boolean(),
 
-  observation: z.string().optional(),
+  observation: z.string().optional().default(''),
 });
 
 export type CreateCallSchemaData = z.infer<typeof createCallSchema>;
