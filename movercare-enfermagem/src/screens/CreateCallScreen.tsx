@@ -12,7 +12,6 @@ import {
 } from 'lucide-react';
 import { createTransportCall } from '../services/movercareService';
 import type { CallPriority, CreateCallForm, Sector, TransportRisk, TransportType } from '../types/movercare';
-import '../styles/emergency-mode-v52.css';
 
 interface CreateCallScreenProps {
   sectors: Sector[];
@@ -281,7 +280,6 @@ export function CreateCallScreen({ sectors, onCreated }: CreateCallScreenProps) 
   const [error, setError] = useState<string | null>(null);
   const [successModal, setSuccessModal] = useState<SuccessModalData | null>(null);
   const [confirmationModal, setConfirmationModal] = useState<ConfirmationModalData | null>(null);
-  const [emergencyMode, setEmergencyMode] = useState(false);
 
   useEffect(() => {
     setForm((current) => ({
@@ -293,33 +291,6 @@ export function CreateCallScreen({ sectors, onCreated }: CreateCallScreenProps) 
 
   function update<K extends keyof CreateCallForm>(key: K, value: CreateCallForm[K]) {
     setForm((current) => ({ ...current, [key]: value }));
-  }
-
-  function activateEmergencyMode() {
-    setEmergencyMode(true);
-    setError(null);
-    setForm((current) => ({
-      ...current,
-      transportType: 'MACA',
-      priority: 'CRITICO',
-      risk: 'ALTO',
-      destinationCommunicated: true,
-      teamConfirmed: true,
-      equipmentConfirmed: true,
-      observation: current.observation.trim()
-        ? current.observation
-        : 'MODO EMERGÊNCIA: transporte crítico solicitado pela enfermagem.',
-    }));
-  }
-
-  function deactivateEmergencyMode() {
-    setEmergencyMode(false);
-    setForm((current) => ({
-      ...current,
-      priority: current.priority === 'CRITICO' ? 'NORMAL' : current.priority,
-      risk: current.risk === 'ALTO' ? 'BAIXO' : current.risk,
-      observation: current.observation === 'MODO EMERGÊNCIA: transporte crítico solicitado pela enfermagem.' ? '' : current.observation,
-    }));
   }
 
   function validateForm() {
@@ -763,53 +734,12 @@ export function CreateCallScreen({ sectors, onCreated }: CreateCallScreenProps) 
         `}
       </style>
 
-      <form className={emergencyMode ? "panel request-form emergency-form-active" : "panel request-form"} onSubmit={handleSubmit}>
-        <div className={emergencyMode ? 'emergency-mode-top active' : 'emergency-mode-top'}>
-          <div>
-            <span><AlertTriangle size={18} /> Modo emergência</span>
-            <strong>{emergencyMode ? 'Emergência ativada' : 'Atalho para chamado crítico'}</strong>
-            <p>Preenche automaticamente maca, prioridade crítica, risco alto e checklist.</p>
-          </div>
-
-          {emergencyMode ? (
-            <button type="button" onClick={deactivateEmergencyMode}>Desativar emergência</button>
-          ) : (
-            <button type="button" onClick={activateEmergencyMode}>Ativar emergência</button>
-          )}
-        </div>
-
+      <form className="panel request-form" onSubmit={handleSubmit}>
         <div className="form-title">
           <span className="section-kicker"><ClipboardPlus size={14} /> Solicitação de transporte</span>
           <h2>Dados do chamado</h2>
           <p>Preencha as informações principais para acionar o maqueiro correto.</p>
         </div>
-
-        <div className={emergencyMode ? 'emergency-mode-card active' : 'emergency-mode-card'}>
-          <div className="emergency-mode-main">
-            <span className="emergency-mode-icon"><AlertTriangle size={22} /></span>
-            <div>
-              <strong>Modo emergência</strong>
-              <p>Preenche automaticamente: maca, prioridade crítica, risco alto e checklist operacional.</p>
-            </div>
-          </div>
-
-          {emergencyMode ? (
-            <button type="button" className="emergency-mode-secondary" onClick={deactivateEmergencyMode}>
-              Desativar
-            </button>
-          ) : (
-            <button type="button" className="emergency-mode-button" onClick={activateEmergencyMode}>
-              Ativar emergência
-            </button>
-          )}
-        </div>
-
-        {emergencyMode && (
-          <div className="emergency-mode-alert">
-            <AlertTriangle size={18} />
-            <span>Emergência ativa: revise paciente, leito, origem e destino antes de confirmar.</span>
-          </div>
-        )}
 
         <div className="form-grid">
           <label>

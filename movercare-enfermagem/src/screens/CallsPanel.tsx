@@ -26,6 +26,7 @@ import type { CallStatus, CreateCallForm, Sector, TransportCall } from '../types
 import '../styles/call-timeline-v49.css';
 import '../styles/nursing-sla-alerts-v50.css';
 import '../styles/nursing-toasts-v51.css';
+import '../styles/dashboard-emergency-v59.css';
 
 interface CallsPanelProps {
   calls: TransportCall[];
@@ -680,6 +681,7 @@ function CallDetailsModal({ call, sectors, onClose, onRecallCreated }: { call: T
   const [recallLoading, setRecallLoading] = useState(false);
   const [recallSuccess, setRecallSuccess] = useState(false);
   const [recallError, setRecallError] = useState<string | null>(null);
+  const [urgentRecall, setUrgentRecall] = useState(false);
 
   async function handleRecall() {
     setRecallLoading(true);
@@ -696,14 +698,16 @@ function CallDetailsModal({ call, sectors, onClose, onRecallCreated }: { call: T
         bedNumber: recallBedNumber,
         originSectorId: recallForm.originSectorId,
         destinationSectorId: recallForm.destinationSectorId,
-        transportType: typedCall.transport_type,
-        priority: recallForm.priority,
-        risk: recallForm.risk,
+        transportType: urgentRecall ? 'MACA' : typedCall.transport_type,
+        priority: urgentRecall ? 'CRITICO' : recallForm.priority,
+        risk: urgentRecall ? 'ALTO' : recallForm.risk,
         destinationCommunicated: true,
         teamConfirmed: true,
         equipmentConfirmed: true,
         infectionPrecaution: typedCall.infection_precaution ?? 'PADRAO',
-        observation: recallForm.observation,
+        observation: urgentRecall
+          ? `RECHAMADA URGENTE: paciente precisa de novo deslocamento crítico. ${recallForm.observation || ''}`.trim()
+          : recallForm.observation,
       };
 
       await createTransportCall(newCall);
@@ -756,7 +760,8 @@ function CallDetailsModal({ call, sectors, onClose, onRecallCreated }: { call: T
 
         {!showRecall && !recallSuccess && (
           <div className="call-modal-actions">
-            <button type="button" onClick={() => setShowRecall(true)}><RefreshCw size={17} /> Rechamar paciente</button>
+            <button type="button" onClick={() => { setUrgentRecall(false); setShowRecall(true); }}><RefreshCw size={17} /> Rechamar paciente</button>
+            <button type="button" className="urgent-recall-button" onClick={() => { setUrgentRecall(true); setShowRecall(true); }}><AlertTriangle size={17} /> Rechamada urgente</button>
             <button type="button" className="light-button" onClick={onClose}>Fechar</button>
           </div>
         )}
@@ -764,19 +769,21 @@ function CallDetailsModal({ call, sectors, onClose, onRecallCreated }: { call: T
         {showRecall && !recallSuccess && (
           <div className="recall-box">
             <div className="recall-title">
-              <span className="section-kicker"><RefreshCw size={14} /> Rechamada</span>
-              <h3>Criar novo transporte com dados reaproveitados</h3>
-              <p>Ideal quando o paciente saiu de um setor e precisa seguir para outro sem refazer todo o cadastro.</p>
+              <span className="section-kicker">{urgentRecall ? <AlertTriangle size={14} /> : <RefreshCw size={14} />} {urgentRecall ? 'Rechamada urgente' : 'Rechamada'}</span>
+              <h3>{urgentRecall ? 'Criar transporte crítico reaproveitando o paciente' : 'Criar novo transporte com dados reaproveitados'}</h3>
+              <p>{urgentRecall ? 'Use quando o paciente piorou ou precisa de deslocamento imediato. Edite somente o novo destino.' : 'Ideal quando o paciente saiu de um setor e precisa seguir para outro sem refazer todo o cadastro.'}</p>
             </div>
-            <div className="recall-grid">
-              <label>Nova origem
-                <div className="input-icon"><MapPin size={17} />
-                  <select value={recallForm.originSectorId} onChange={(event) => setRecallForm((current) => ({ ...current, originSectorId: event.target.value }))}>
-                    <option value="">Selecione</option>
-                    {sectors.map((sector) => <option key={sector.id} value={sector.id}>{sector.name}</option>)}
-                  </select>
-                </div>
-              </label>
+            <div className={urgentRecall ? 'recall-grid urgent-only' : 'recall-grid'}>
+              {!urgentRecall && (
+                <label>Nova origem
+                  <div className="input-icon"><MapPin size={17} />
+                    <select value={recallForm.originSectorId} onChange={(event) => setRecallForm((current) => ({ ...current, originSectorId: event.target.value }))}>
+                      <option value="">Selecione</option>
+                      {sectors.map((sector) => <option key={sector.id} value={sector.id}>{sector.name}</option>)}
+                    </select>
+                  </div>
+                </label>
+              )}
               <label>Novo destino
                 <div className="input-icon"><Route size={17} />
                   <select value={recallForm.destinationSectorId} onChange={(event) => setRecallForm((current) => ({ ...current, destinationSectorId: event.target.value }))}>
@@ -785,17 +792,28 @@ function CallDetailsModal({ call, sectors, onClose, onRecallCreated }: { call: T
                   </select>
                 </div>
               </label>
-              <label>Prioridade
-                <select value={recallForm.priority} onChange={(event) => setRecallForm((current) => ({ ...current, priority: event.target.value as typeof call.priority }))}>
-                  <option value="NORMAL">NORMAL</option><option value="URGENTE">URGENTE</option><option value="CRITICO">CRITICO</option>
-                </select>
-              </label>
-              <label>Risco
-                <select value={recallForm.risk} onChange={(event) => setRecallForm((current) => ({ ...current, risk: event.target.value as typeof call.risk }))}>
-                  <option value="BAIXO">BAIXO</option><option value="MEDIO">MEDIO</option><option value="ALTO">ALTO</option>
-                </select>
-              </label>
+              {!urgentRecall && (
+                <>
+                  <label>Prioridade
+                    <select value={recallForm.priority} onChange={(event) => setRecallForm((current) => ({ ...current, priority: event.target.value as typeof call.priority }))}>
+                      <option value="NORMAL">NORMAL</option><option value="URGENTE">URGENTE</option><option value="CRITICO">CRITICO</option>
+                    </select>
+                  </label>
+                  <label>Risco
+                    <select value={recallForm.risk} onChange={(event) => setRecallForm((current) => ({ ...current, risk: event.target.value as typeof call.risk }))}>
+                      <option value="BAIXO">BAIXO</option><option value="MEDIO">MEDIO</option><option value="ALTO">ALTO</option>
+                    </select>
+                  </label>
+                </>
+              )}
             </div>
+
+            {urgentRecall && (
+              <div className="urgent-recall-summary">
+                <AlertTriangle size={18} />
+                <span>Origem mantida: <strong>{sectorName(sectors, recallForm.originSectorId)}</strong>. O novo chamado será crítico, risco alto e por maca.</span>
+              </div>
+            )}
             <label>Observação da rechamada
               <textarea rows={3} value={recallForm.observation} onChange={(event) => setRecallForm((current) => ({ ...current, observation: event.target.value }))} />
             </label>
@@ -806,7 +824,7 @@ function CallDetailsModal({ call, sectors, onClose, onRecallCreated }: { call: T
             {recallError && <div className="error-box">{recallError}</div>}
             <div className="call-modal-actions">
               <button type="button" onClick={handleRecall} disabled={recallLoading} className={recallLoading ? 'button-loading' : ''}>
-                {recallLoading ? 'Criando rechamada...' : <><Send size={17} /> Confirmar rechamada</>}
+                {recallLoading ? 'Criando rechamada...' : <><Send size={17} /> {urgentRecall ? 'Confirmar urgência' : 'Confirmar rechamada'}</>}
               </button>
               <button type="button" className="light-button" onClick={() => setShowRecall(false)}>Cancelar</button>
             </div>

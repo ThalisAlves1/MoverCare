@@ -19,14 +19,16 @@ import {
   ShieldCheck,
   Stethoscope,
   UsersRound,
+  X,
 } from 'lucide-react';
 import { CreateCallScreen } from './CreateCallScreen';
 import { CallsPanel } from './CallsPanel';
-import { getMyCalls, getSectors, signOut } from '../services/movercareService';
-import type { Profile, Sector, TransportCall } from '../types/movercare';
+import { createTransportCall, getMyCalls, getSectors, signOut } from '../services/movercareService';
+import type { CreateCallForm, Profile, Sector, TransportCall } from '../types/movercare';
 import { supabase } from '../lib/supabase';
 import '../styles/profile-page-v27.css';
 import '../styles/logout-v39.css';
+import '../styles/dashboard-emergency-v59.css';
 
 interface NursingDashboardProps {
   profile: Profile;
@@ -181,6 +183,137 @@ function matchesDashboardFilter(call: TransportCall, filter: DashboardStatusFilt
   return true;
 }
 
+
+function EmergencyQuickModal({
+  sectors,
+  onClose,
+  onCreated,
+}: {
+  sectors: Sector[];
+  onClose: () => void;
+  onCreated: () => void;
+}) {
+  const [form, setForm] = useState({
+    patientCode: '',
+    bedNumber: '',
+    originSectorId: '',
+    destinationSectorId: '',
+  });
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  function update(key: keyof typeof form, value: string) {
+    setForm((current) => ({ ...current, [key]: value }));
+  }
+
+  async function submitEmergency() {
+    setError(null);
+
+    try {
+      if (!form.patientCode.trim()) throw new Error('Informe o nome ou código do paciente.');
+      if (!form.bedNumber.trim()) throw new Error('Informe o leito.');
+      if (!form.originSectorId || !form.destinationSectorId) throw new Error('Informe origem e destino.');
+      if (form.originSectorId === form.destinationSectorId) throw new Error('Origem e destino não podem ser iguais.');
+
+      setLoading(true);
+
+      const payload: CreateCallForm = {
+        patientCode: form.patientCode.trim(),
+        bedNumber: form.bedNumber.trim(),
+        originSectorId: form.originSectorId,
+        destinationSectorId: form.destinationSectorId,
+        transportType: 'MACA',
+        priority: 'CRITICO',
+        risk: 'ALTO',
+        destinationCommunicated: true,
+        teamConfirmed: true,
+        equipmentConfirmed: true,
+        infectionPrecaution: 'PADRAO',
+        observation: 'MODO EMERGÊNCIA: chamado crítico aberto pelo atalho do dashboard.',
+      };
+
+      await createTransportCall(payload);
+      onCreated();
+      onClose();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Erro ao criar chamado de emergência.');
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return (
+    <div className="dashboard-emergency-modal-backdrop" role="dialog" aria-modal="true">
+      <div className="dashboard-emergency-modal">
+        <button type="button" className="dashboard-emergency-close" onClick={onClose} aria-label="Fechar emergência">
+          <X size={18} />
+        </button>
+
+        <div className="dashboard-emergency-modal-head">
+          <span><AlertTriangle size={18} /> Chamado crítico</span>
+          <h2>Emergência rápida</h2>
+          <p>Preencha somente o essencial. O sistema envia como maca, prioridade crítica e risco alto.</p>
+        </div>
+
+        <div className="dashboard-emergency-grid">
+          <label>
+            Nome ou código do paciente
+            <input
+              value={form.patientCode}
+              onChange={(event) => update('patientCode', event.target.value)}
+              placeholder="Ex.: Maria Silva ou PAC-001"
+              autoFocus
+            />
+          </label>
+
+          <label>
+            Leito
+            <input
+              value={form.bedNumber}
+              onChange={(event) => update('bedNumber', event.target.value)}
+              placeholder="Ex.: 204A, UTI-03"
+            />
+          </label>
+
+          <label>
+            Origem
+            <select value={form.originSectorId} onChange={(event) => update('originSectorId', event.target.value)}>
+              <option value="">Selecione</option>
+              {sectors.map((sector) => <option key={sector.id} value={sector.id}>{sector.name}</option>)}
+            </select>
+          </label>
+
+          <label>
+            Destino
+            <select value={form.destinationSectorId} onChange={(event) => update('destinationSectorId', event.target.value)}>
+              <option value="">Selecione</option>
+              {sectors.map((sector) => <option key={sector.id} value={sector.id}>{sector.name}</option>)}
+            </select>
+          </label>
+        </div>
+
+        <div className="dashboard-emergency-fixed">
+          <span>Transporte: <strong>Maca</strong></span>
+          <span>Prioridade: <strong>Crítico</strong></span>
+          <span>Risco: <strong>Alto</strong></span>
+        </div>
+
+        {error && <div className="error-box">{error}</div>}
+
+        <div className="dashboard-emergency-actions">
+          <button type="button" onClick={submitEmergency} disabled={loading}>
+            {loading ? 'Criando emergência...' : 'Confirmar emergência'}
+          </button>
+          <button type="button" className="light-button" onClick={onClose} disabled={loading}>
+            Cancelar
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+
 function DashboardHome({
   calls,
   sectors,
@@ -200,6 +333,7 @@ function DashboardHome({
 }) {
   const typedProfile = profile as any;
   const [dashboardStatusFilter, setDashboardStatusFilter] = useState<DashboardStatusFilter>('TODOS');
+  const [showEmergencyModal, setShowEmergencyModal] = useState(false);
   const opened = calls.filter((call) => !['CONCLUIDO', 'CANCELADO'].includes(call.status));
   const inProgress = calls.filter((call) => ['ACEITO', 'A_CAMINHO_ORIGEM', 'EM_TRANSITO'].includes(call.status));
   const completedToday = calls.filter((call) => call.status === 'CONCLUIDO' && isToday((call as any).completed_at ?? call.created_at));
@@ -245,10 +379,16 @@ function DashboardHome({
                 <h2>Olá, {firstName(profile)}</h2>
                 <p>Confira o status dos transportes e acompanhe os chamados em tempo real.</p>
               </div>
-              <button type="button" onClick={goToNewCall}>
-                <ClipboardPlus size={19} />
-                Novo Chamado
-              </button>
+              <div className="hero-actions">
+                <button type="button" onClick={goToNewCall}>
+                  <ClipboardPlus size={19} />
+                  Novo Chamado
+                </button>
+                <button type="button" className="dashboard-emergency-shortcut" onClick={() => setShowEmergencyModal(true)}>
+                  <AlertTriangle size={18} />
+                  Emergência
+                </button>
+              </div>
             </section>
 
             <section className="reference-metrics">
@@ -422,7 +562,7 @@ function DashboardHome({
             <section className="reference-side-card">
               <h3>Atalhos rápidos</h3>
               <div className="quick-shortcuts">
-                <button onClick={goToNewCall}><ClipboardCheck size={22} /><span>Checklist</span></button>
+                <button onClick={() => setShowEmergencyModal(true)}><AlertTriangle size={22} /><span>Emergência</span></button>
                 <button><Package size={22} /><span>Equipamentos</span></button>
                 <button><UsersRound size={22} /><span>Maqueiros</span></button>
                 <button><BarChart3 size={22} /><span>Relatórios</span></button>
@@ -431,6 +571,14 @@ function DashboardHome({
           </aside>
         </div>
       </section>
+
+      {showEmergencyModal && (
+        <EmergencyQuickModal
+          sectors={sectors}
+          onClose={() => setShowEmergencyModal(false)}
+          onCreated={loadData}
+        />
+      )}
     </>
   );
 }
@@ -636,7 +784,7 @@ export function NursingDashboard({ profile, onLogout }: NursingDashboardProps) {
         </nav>
 
         <div className="reference-sidebar-footer">
-          <ShieldCheck size={0} />
+          <ShieldCheck size={23} />
           <strong>Segurança e qualidade em cada movimento.</strong>
 
           <button type="button" className="nursing-logout-button" onClick={handleLogout}>
