@@ -12,6 +12,7 @@ import {
 } from 'lucide-react';
 import { createTransportCall } from '../services/movercareService';
 import type { CallPriority, CreateCallForm, Sector, TransportRisk, TransportType } from '../types/movercare';
+import { createCallSchema, type CreateCallSchemaData } from '../schemas/createCallSchema';
 
 interface CreateCallScreenProps {
   sectors: Sector[];
