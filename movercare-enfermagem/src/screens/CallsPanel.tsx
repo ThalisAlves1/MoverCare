@@ -1,5 +1,6 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
+  BellRing,
   CheckCircle2,
   ChevronLeft,
   ChevronRight,
@@ -23,6 +24,7 @@ import { createTransportCall } from '../services/movercareService';
 import type { CallStatus, CreateCallForm, Sector, TransportCall } from '../types/movercare';
 import '../styles/call-timeline-v49.css';
 import '../styles/nursing-sla-alerts-v50.css';
+import '../styles/nursing-toasts-v51.css';
 
 interface CallsPanelProps {
   calls: TransportCall[];
@@ -206,6 +208,95 @@ function DetailItem({ label, value }: { label: string; value?: string | number |
   );
 }
 
+
+
+
+type NursingToastTone = 'success' | 'warning' | 'danger' | 'info';
+
+interface NursingToast {
+  id: string;
+  tone: NursingToastTone;
+  title: string;
+  message: string;
+  callId?: string;
+}
+
+function getToastToneForStatus(status: CallStatus): NursingToastTone {
+  if (status === 'CONCLUIDO') return 'success';
+  if (status === 'CANCELADO' || status === 'ATRASADO') return 'danger';
+  if (['ACEITO', 'A_CAMINHO_ORIGEM', 'EM_TRANSITO'].includes(status)) return 'info';
+  return 'warning';
+}
+
+function getToastTitleForStatus(status: CallStatus) {
+  const titles: Record<CallStatus, string> = {
+    ABERTO: 'Chamado aberto',
+    AGUARDANDO_MAQUEIRO: 'Aguardando maqueiro',
+    ENVIADO: 'Chamado enviado ao maqueiro',
+    ACEITO: 'Maqueiro aceitou o chamado',
+    A_CAMINHO_ORIGEM: 'Maqueiro a caminho da origem',
+    EM_TRANSITO: 'Paciente em transporte',
+    CONCLUIDO: 'Transporte concluído',
+    CANCELADO: 'Chamado cancelado',
+    ATRASADO: 'Chamado em atraso',
+  };
+
+  return titles[status] ?? 'Atualização do chamado';
+}
+
+function buildToastMessage(call: TransportCall) {
+  const typedCall = call as any;
+  const number = String(call.number).padStart(6, '0');
+  const patient = typedCall.patient_code ? `Paciente ${typedCall.patient_code}` : 'Paciente não informado';
+  const route = `${typedCall.origin_sector?.name ?? '-'} → ${typedCall.destination_sector?.name ?? '-'}`;
+
+  return `#${number} • ${patient} • ${route}`;
+}
+
+function NursingToastStack({
+  toasts,
+  onClose,
+  onOpenCall,
+  calls,
+}: {
+  toasts: NursingToast[];
+  onClose: (id: string) => void;
+  onOpenCall: (call: TransportCall) => void;
+  calls: TransportCall[];
+}) {
+  if (toasts.length === 0) return null;
+
+  return (
+    <div className="nursing-toast-stack" aria-live="polite" aria-relevant="additions">
+      {toasts.map((toast) => {
+        const relatedCall = toast.callId ? calls.find((call) => call.id === toast.callId) : null;
+
+        return (
+          <div key={toast.id} className={`nursing-toast ${toast.tone}`}>
+            <span className="nursing-toast-icon">
+              {toast.tone === 'success' ? <CheckCircle2 size={18} /> : toast.tone === 'danger' ? <AlertTriangle size={18} /> : <BellRing size={18} />}
+            </span>
+
+            <div>
+              <strong>{toast.title}</strong>
+              <p>{toast.message}</p>
+
+              {relatedCall && (
+                <button type="button" onClick={() => onOpenCall(relatedCall)}>
+                  Ver chamado
+                </button>
+              )}
+            </div>
+
+            <button type="button" className="nursing-toast-close" onClick={() => onClose(toast.id)} aria-label="Fechar notificação">
+              <X size={16} />
+            </button>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
 
 
 type NursingSlaAlertTone = 'danger' | 'warning' | 'info';
@@ -731,8 +822,59 @@ export function CallsPanel({ calls, sectors, loading, onCreated }: CallsPanelPro
   const [pageSize, setPageSize] = useState(7);
   const [page, setPage] = useState(1);
   const [selectedCall, setSelectedCall] = useState<TransportCall | null>(null);
+  const [toasts, setToasts] = useState<NursingToast[]>([]);
+  const previousCallStatusRef = useRef<Map<string, CallStatus>>(new Map());
+  const firstToastLoadRef = useRef(true);
 
   const counts = useMemo(() => getCounts(calls), [calls]);
+
+
+  useEffect(() => {
+    const previousMap = previousCallStatusRef.current;
+    const nextMap = new Map<string, CallStatus>();
+
+    calls.forEach((call) => {
+      nextMap.set(call.id, call.status);
+    });
+
+    if (firstToastLoadRef.current) {
+      previousCallStatusRef.current = nextMap;
+      firstToastLoadRef.current = false;
+      return;
+    }
+
+    const generatedToasts: NursingToast[] = [];
+
+    calls.forEach((call) => {
+      const previousStatus = previousMap.get(call.id);
+
+      if (previousStatus && previousStatus !== call.status) {
+        generatedToasts.push({
+          id: `${call.id}-${call.status}-${Date.now()}`,
+          tone: getToastToneForStatus(call.status),
+          title: getToastTitleForStatus(call.status),
+          message: buildToastMessage(call),
+          callId: call.id,
+        });
+      }
+    });
+
+    previousCallStatusRef.current = nextMap;
+
+    if (generatedToasts.length === 0) return;
+
+    setToasts((current) => [...generatedToasts, ...current].slice(0, 4));
+
+    const timeout = window.setTimeout(() => {
+      setToasts((current) => current.filter((toast) => !generatedToasts.some((created) => created.id === toast.id)));
+    }, 7500);
+
+    return () => window.clearTimeout(timeout);
+  }, [calls]);
+
+  function closeToast(id: string) {
+    setToasts((current) => current.filter((toast) => toast.id !== id));
+  }
 
   const filteredCalls = useMemo(() => {
     const cleanSearch = normalize(search);
@@ -788,6 +930,13 @@ export function CallsPanel({ calls, sectors, loading, onCreated }: CallsPanelPro
 
   return (
     <>
+      <NursingToastStack
+        toasts={toasts}
+        onClose={closeToast}
+        onOpenCall={setSelectedCall}
+        calls={calls}
+      />
+
       <NursingSlaAlerts calls={calls} onOpenCall={setSelectedCall} />
 
       <section className="reference-table-panel">

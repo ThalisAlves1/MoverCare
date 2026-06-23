@@ -1,0 +1,141 @@
+
+/* v52 - Modo emergência no formulário da Enfermagem */
+.emergency-mode-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin: 18px 0 20px;
+  padding: 16px;
+  border-radius: 22px;
+  border: 1px solid #dcecef;
+  background:
+    radial-gradient(circle at 0% 0%, rgba(0, 137, 139, .08), transparent 35%),
+    linear-gradient(135deg, #ffffff, #f7fcfc);
+  box-shadow: 0 12px 34px rgba(12, 73, 84, .07);
+}
+
+.emergency-mode-card.active {
+  border-color: #fecaca;
+  background:
+    radial-gradient(circle at 0% 0%, rgba(239, 68, 68, .12), transparent 36%),
+    linear-gradient(135deg, #ffffff, #fef2f2);
+}
+
+.emergency-mode-main {
+  display: flex;
+  align-items: center;
+  gap: 13px;
+}
+
+.emergency-mode-icon {
+  width: 48px;
+  height: 48px;
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+  border-radius: 999px;
+  color: #08747c;
+  background: #e9f8f8;
+  border: 1px solid #cfeeee;
+}
+
+.emergency-mode-card.active .emergency-mode-icon {
+  color: #b42318;
+  background: #fef2f2;
+  border-color: #fecaca;
+  animation: emergencyPulse 1.25s ease-in-out infinite;
+}
+
+.emergency-mode-main strong {
+  display: block;
+  color: #101828;
+  font-size: 16px;
+  margin-bottom: 3px;
+}
+
+.emergency-mode-main p {
+  margin: 0;
+  color: #667085;
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+.emergency-mode-button,
+.emergency-mode-secondary {
+  min-height: 42px;
+  border-radius: 999px;
+  padding: 0 16px;
+  font-weight: 900;
+  white-space: nowrap;
+}
+
+.emergency-mode-button {
+  background: #b42318;
+  color: #ffffff;
+  border: 0;
+  box-shadow: 0 14px 28px rgba(180, 35, 24, .20);
+}
+
+.emergency-mode-button:hover {
+  background: #991b1b;
+}
+
+.emergency-mode-secondary {
+  color: #b42318;
+  background: #ffffff;
+  border: 1px solid #fecaca;
+  box-shadow: none;
+}
+
+.emergency-mode-secondary:hover {
+  background: #fff5f5;
+  box-shadow: none;
+}
+
+.emergency-mode-alert {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: -6px 0 18px;
+  padding: 12px 14px;
+  border-radius: 16px;
+  color: #b42318;
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.emergency-form-active select,
+.emergency-form-active input,
+.emergency-form-active textarea {
+  border-color: #dcecef;
+}
+
+.emergency-form-active label:has(select[value="CRITICO"]),
+.emergency-form-active label:has(select[value="ALTO"]) {
+  color: #b42318;
+}
+
+@keyframes emergencyPulse {
+  0%, 100% {
+    box-shadow: 0 0 0 0 rgba(180, 35, 24, .22);
+  }
+
+  50% {
+    box-shadow: 0 0 0 9px rgba(180, 35, 24, 0);
+  }
+}
+
+@media (max-width: 720px) {
+  .emergency-mode-card {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .emergency-mode-button,
+  .emergency-mode-secondary {
+    width: 100%;
+  }
+}
