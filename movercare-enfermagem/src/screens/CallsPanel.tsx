@@ -21,6 +21,8 @@ import {
 } from 'lucide-react';
 import { createTransportCall } from '../services/movercareService';
 import type { CallStatus, CreateCallForm, Sector, TransportCall } from '../types/movercare';
+import '../styles/call-timeline-v49.css';
+import '../styles/nursing-sla-alerts-v50.css';
 
 interface CallsPanelProps {
   calls: TransportCall[];
@@ -91,6 +93,32 @@ function formatDate(value?: string | null) {
     hour: '2-digit',
     minute: '2-digit',
   }).format(new Date(value));
+}
+
+function formatDurationBetween(start?: string | null, end?: string | null) {
+  if (!start || !end) return null;
+
+  const startDate = new Date(start);
+  const endDate = new Date(end);
+  const diffMs = endDate.getTime() - startDate.getTime();
+
+  if (!Number.isFinite(diffMs) || diffMs < 0) return null;
+
+  const minutes = Math.round(diffMs / 60000);
+  if (minutes < 1) return 'menos de 1 min';
+  if (minutes < 60) return `${minutes} min`;
+
+  const hours = Math.floor(minutes / 60);
+  const rest = minutes % 60;
+  return rest ? `${hours}h ${rest}min` : `${hours}h`;
+}
+
+function getCallTimestamp(call: TransportCall, field: string) {
+  return (call as any)?.[field] as string | null | undefined;
+}
+
+function isStatusAtLeast(call: TransportCall, acceptedStatuses: CallStatus[]) {
+  return acceptedStatuses.includes(call.status);
 }
 
 function labelTransportType(value?: string | null) {
@@ -177,6 +205,317 @@ function DetailItem({ label, value }: { label: string; value?: string | number |
     </div>
   );
 }
+
+
+
+type NursingSlaAlertTone = 'danger' | 'warning' | 'info';
+
+interface NursingSlaAlert {
+  id: string;
+  call: TransportCall;
+  tone: NursingSlaAlertTone;
+  title: string;
+  message: string;
+  elapsedText: string;
+}
+
+function minutesSince(value?: string | null) {
+  if (!value) return null;
+
+  const date = new Date(value);
+  const diffMs = Date.now() - date.getTime();
+
+  if (!Number.isFinite(diffMs) || diffMs < 0) return null;
+
+  return Math.floor(diffMs / 60000);
+}
+
+function formatElapsedMinutes(minutes: number | null) {
+  if (minutes === null) return '-';
+  if (minutes < 1) return 'agora';
+  if (minutes < 60) return `${minutes} min`;
+  const hours = Math.floor(minutes / 60);
+  const rest = minutes % 60;
+  return rest ? `${hours}h ${rest}min` : `${hours}h`;
+}
+
+function buildNursingSlaAlerts(calls: TransportCall[]): NursingSlaAlert[] {
+  const activeCalls = calls.filter((call) => !['CONCLUIDO', 'CANCELADO'].includes(call.status));
+
+  const alerts = activeCalls
+    .map((call) => {
+      const typedCall = call as any;
+      const createdMinutes = minutesSince(typedCall.created_at);
+      const acceptedMinutes = minutesSince(typedCall.accepted_at);
+      const originMinutes = minutesSince(typedCall.qr_origin_read_at);
+
+      if (call.status === 'ATRASADO') {
+        return {
+          id: `${call.id}-late`,
+          call,
+          tone: 'danger' as NursingSlaAlertTone,
+          title: 'Chamado atrasado',
+          message: `Chamado #${String(call.number).padStart(6, '0')} precisa de atenção imediata.`,
+          elapsedText: formatElapsedMinutes(createdMinutes),
+        };
+      }
+
+      if (call.priority === 'CRITICO' && ['ABERTO', 'AGUARDANDO_MAQUEIRO', 'ENVIADO'].includes(call.status) && (createdMinutes ?? 0) >= 3) {
+        return {
+          id: `${call.id}-critical-waiting`,
+          call,
+          tone: 'danger' as NursingSlaAlertTone,
+          title: 'Crítico aguardando maqueiro',
+          message: `Paciente ${typedCall.patient_code || 'não informado'} ainda não iniciou atendimento.`,
+          elapsedText: formatElapsedMinutes(createdMinutes),
+        };
+      }
+
+      if (call.priority === 'URGENTE' && ['ABERTO', 'AGUARDANDO_MAQUEIRO', 'ENVIADO'].includes(call.status) && (createdMinutes ?? 0) >= 5) {
+        return {
+          id: `${call.id}-urgent-waiting`,
+          call,
+          tone: 'danger' as NursingSlaAlertTone,
+          title: 'Urgente aguardando aceite',
+          message: `Chamado urgente está parado antes do aceite.`,
+          elapsedText: formatElapsedMinutes(createdMinutes),
+        };
+      }
+
+      if (['ABERTO', 'AGUARDANDO_MAQUEIRO', 'ENVIADO'].includes(call.status) && (createdMinutes ?? 0) >= 8) {
+        return {
+          id: `${call.id}-waiting`,
+          call,
+          tone: 'warning' as NursingSlaAlertTone,
+          title: 'Aguardando há muito tempo',
+          message: `Ainda não houve avanço operacional no chamado.`,
+          elapsedText: formatElapsedMinutes(createdMinutes),
+        };
+      }
+
+      if (['ACEITO', 'A_CAMINHO_ORIGEM'].includes(call.status) && !typedCall.qr_origin_read_at && (acceptedMinutes ?? 0) >= 10) {
+        return {
+          id: `${call.id}-origin-delay`,
+          call,
+          tone: 'warning' as NursingSlaAlertTone,
+          title: 'Demora para chegar na origem',
+          message: `Maqueiro aceitou, mas a origem ainda não foi confirmada.`,
+          elapsedText: formatElapsedMinutes(acceptedMinutes),
+        };
+      }
+
+      if (call.status === 'EM_TRANSITO' && (originMinutes ?? 0) >= 30) {
+        return {
+          id: `${call.id}-transport-delay`,
+          call,
+          tone: 'warning' as NursingSlaAlertTone,
+          title: 'Transporte em andamento prolongado',
+          message: `Paciente está em transporte por tempo acima do esperado.`,
+          elapsedText: formatElapsedMinutes(originMinutes),
+        };
+      }
+
+      return null;
+    })
+    .filter(Boolean) as NursingSlaAlert[];
+
+  const score = { danger: 0, warning: 1, info: 2 };
+
+  return alerts.sort((a, b) => {
+    const toneDiff = score[a.tone] - score[b.tone];
+    if (toneDiff !== 0) return toneDiff;
+    return (minutesSince((b.call as any).created_at) ?? 0) - (minutesSince((a.call as any).created_at) ?? 0);
+  });
+}
+
+function NursingSlaAlerts({ calls, onOpenCall }: { calls: TransportCall[]; onOpenCall: (call: TransportCall) => void }) {
+  const alerts = buildNursingSlaAlerts(calls);
+  const criticalCount = alerts.filter((alert) => alert.tone === 'danger').length;
+  const warningCount = alerts.filter((alert) => alert.tone === 'warning').length;
+
+  return (
+    <section className={alerts.length > 0 ? 'nursing-sla-panel has-alerts' : 'nursing-sla-panel'}>
+      <div className="nursing-sla-header">
+        <div>
+          <span className="section-kicker"><AlertTriangle size={14} /> Alertas SLA</span>
+          <h2>Risco operacional da enfermagem</h2>
+          <p>Chamados com atraso, urgência ou parada operacional aparecem aqui automaticamente.</p>
+        </div>
+
+        <div className="nursing-sla-badges">
+          <span className="danger">{criticalCount} críticos</span>
+          <span className="warning">{warningCount} atenção</span>
+        </div>
+      </div>
+
+      {alerts.length === 0 && (
+        <div className="nursing-sla-empty">
+          <CheckCircle2 size={22} />
+          <div>
+            <strong>Nenhum alerta crítico agora</strong>
+            <small>Todos os chamados ativos estão dentro do acompanhamento esperado.</small>
+          </div>
+        </div>
+      )}
+
+      {alerts.length > 0 && (
+        <div className="nursing-sla-grid">
+          {alerts.slice(0, 4).map((alert) => {
+            const typedCall = alert.call as any;
+            return (
+              <button
+                type="button"
+                key={alert.id}
+                className={`nursing-sla-card ${alert.tone}`}
+                onClick={() => onOpenCall(alert.call)}
+              >
+                <span className="sla-card-icon">{alert.tone === 'danger' ? <AlertTriangle size={20} /> : <Clock3 size={20} />}</span>
+                <div>
+                  <strong>{alert.title}</strong>
+                  <p>{alert.message}</p>
+                  <small>
+                    #{String(alert.call.number).padStart(6, '0')} • {typedCall.origin_sector?.name ?? '-'} → {typedCall.destination_sector?.name ?? '-'}
+                  </small>
+                </div>
+                <em>{alert.elapsedText}</em>
+              </button>
+            );
+          })}
+        </div>
+      )}
+
+      {alerts.length > 4 && (
+        <small className="nursing-sla-more">
+          +{alerts.length - 4} alerta{alerts.length - 4 === 1 ? '' : 's'} na lista de chamados.
+        </small>
+      )}
+    </section>
+  );
+}
+
+
+function buildCallTimeline(call: TransportCall) {
+  const typedCall = call as any;
+
+  const createdAt = typedCall.created_at;
+  const assignedAt = typedCall.assigned_at || typedCall.sent_at || typedCall.updated_at;
+  const acceptedAt = typedCall.accepted_at;
+  const originReadAt = typedCall.qr_origin_read_at;
+  const destinationReadAt = typedCall.qr_destination_read_at;
+  const completedAt = typedCall.completed_at || destinationReadAt;
+  const cancelledAt = typedCall.cancelled_at;
+
+  const hasMaqueiro = Boolean(typedCall.assigned_maqueiro_id || typedCall.assigned_maqueiro || typedCall.maqueiro);
+
+  const events = [
+    {
+      key: 'created',
+      title: 'Chamado solicitado',
+      description: 'A enfermagem registrou a solicitação no MoverCare.',
+      time: createdAt,
+      done: Boolean(createdAt),
+      icon: <ClipboardPlus size={17} />,
+      duration: null,
+    },
+    {
+      key: 'distributed',
+      title: 'Distribuição automática',
+      description: hasMaqueiro ? 'Chamado vinculado a um maqueiro.' : 'Aguardando distribuição ou maqueiro disponível.',
+      time: hasMaqueiro ? assignedAt : null,
+      done: hasMaqueiro || isStatusAtLeast(call, ['ENVIADO', 'ACEITO', 'A_CAMINHO_ORIGEM', 'EM_TRANSITO', 'CONCLUIDO']),
+      icon: <Send size={17} />,
+      duration: formatDurationBetween(createdAt, assignedAt),
+    },
+    {
+      key: 'accepted',
+      title: 'Chamado aceito',
+      description: 'O maqueiro aceitou e iniciou o deslocamento.',
+      time: acceptedAt,
+      done: Boolean(acceptedAt) || isStatusAtLeast(call, ['ACEITO', 'A_CAMINHO_ORIGEM', 'EM_TRANSITO', 'CONCLUIDO']),
+      icon: <UserCheck size={17} />,
+      duration: formatDurationBetween(createdAt, acceptedAt),
+    },
+    {
+      key: 'origin',
+      title: 'Chegada na origem',
+      description: 'QR da origem lido ou etapa de origem confirmada.',
+      time: originReadAt,
+      done: Boolean(originReadAt) || isStatusAtLeast(call, ['EM_TRANSITO', 'CONCLUIDO']),
+      icon: <MapPin size={17} />,
+      duration: formatDurationBetween(acceptedAt || createdAt, originReadAt),
+    },
+    {
+      key: 'transit',
+      title: 'Transporte em andamento',
+      description: 'Paciente em deslocamento até o destino.',
+      time: originReadAt && call.status === 'EM_TRANSITO' ? originReadAt : null,
+      done: isStatusAtLeast(call, ['EM_TRANSITO', 'CONCLUIDO']),
+      icon: <Truck size={17} />,
+      duration: null,
+    },
+    {
+      key: 'completed',
+      title: call.status === 'CANCELADO' ? 'Chamado cancelado' : 'Transporte concluído',
+      description: call.status === 'CANCELADO' ? 'Fluxo encerrado por cancelamento.' : 'QR do destino lido e transporte finalizado.',
+      time: call.status === 'CANCELADO' ? cancelledAt : completedAt,
+      done: call.status === 'CANCELADO' || Boolean(completedAt) || call.status === 'CONCLUIDO',
+      icon: call.status === 'CANCELADO' ? <X size={17} /> : <CheckCircle2 size={17} />,
+      duration: formatDurationBetween(createdAt, completedAt),
+    },
+  ];
+
+  return events;
+}
+
+function CallTimeline({ call }: { call: TransportCall }) {
+  const events = buildCallTimeline(call);
+  const completedEvents = events.filter((event) => event.done).length;
+  const totalDuration = formatDurationBetween(getCallTimestamp(call, 'created_at'), getCallTimestamp(call, 'completed_at') || getCallTimestamp(call, 'qr_destination_read_at'));
+  const acceptDuration = formatDurationBetween(getCallTimestamp(call, 'created_at'), getCallTimestamp(call, 'accepted_at'));
+  const transportDuration = formatDurationBetween(getCallTimestamp(call, 'qr_origin_read_at'), getCallTimestamp(call, 'completed_at') || getCallTimestamp(call, 'qr_destination_read_at'));
+
+  return (
+    <section className="call-timeline-card">
+      <div className="call-timeline-head">
+        <div>
+          <span className="section-kicker"><Clock3 size={14} /> Linha do tempo</span>
+          <h3>Histórico do chamado</h3>
+          <p>Veja cada etapa registrada no transporte, com horário e duração quando disponível.</p>
+        </div>
+        <span className="timeline-counter">{completedEvents}/{events.length}</span>
+      </div>
+
+      <div className="timeline-metrics">
+        <div>
+          <small>Tempo até aceite</small>
+          <strong>{acceptDuration || '-'}</strong>
+        </div>
+        <div>
+          <small>Tempo de transporte</small>
+          <strong>{transportDuration || '-'}</strong>
+        </div>
+        <div>
+          <small>Tempo total</small>
+          <strong>{totalDuration || '-'}</strong>
+        </div>
+      </div>
+
+      <div className="call-timeline-list">
+        {events.map((event, index) => (
+          <div key={event.key} className={['timeline-event', event.done ? 'done' : '', index === completedEvents && call.status !== 'CONCLUIDO' && call.status !== 'CANCELADO' ? 'current' : ''].join(' ')}>
+            <span className="timeline-dot">{event.icon}</span>
+            <div>
+              <strong>{event.title}</strong>
+              <p>{event.description}</p>
+              <small>{event.time ? formatDate(event.time) : 'Ainda não registrado'}{event.duration ? ` • ${event.duration}` : ''}</small>
+            </div>
+          </div>
+        ))}
+      </div>
+    </section>
+  );
+}
+
 
 function TransportTracker({ call, compact = false }: { call: TransportCall; compact?: boolean }) {
   const step = getCallStep(call.status);
@@ -286,6 +625,8 @@ function CallDetailsModal({ call, sectors, onClose, onRecallCreated }: { call: T
         </div>
 
         <TransportTracker call={call} />
+
+        <CallTimeline call={call} />
 
         <div className="call-route-card">
           <div><small>Origem</small><strong>{typedCall.origin_sector?.name ?? '-'}</strong></div>
@@ -447,6 +788,8 @@ export function CallsPanel({ calls, sectors, loading, onCreated }: CallsPanelPro
 
   return (
     <>
+      <NursingSlaAlerts calls={calls} onOpenCall={setSelectedCall} />
+
       <section className="reference-table-panel">
         <div className="reference-toolbar v8-toolbar">
           <div className="reference-tabs">
