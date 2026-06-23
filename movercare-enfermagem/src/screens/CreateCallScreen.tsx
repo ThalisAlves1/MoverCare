@@ -12,7 +12,6 @@ import {
 } from 'lucide-react';
 import { createTransportCall } from '../services/movercareService';
 import type { CallPriority, CreateCallForm, Sector, TransportRisk, TransportType } from '../types/movercare';
-import { createCallSchema, type CreateCallSchemaData } from '../schemas/createCallSchema';
 
 interface CreateCallScreenProps {
   sectors: Sector[];
@@ -54,6 +53,105 @@ interface SuccessModalData {
   risk: TransportRisk;
   transportType: TransportType;
 }
+
+interface ConfirmationModalData extends SuccessModalData {
+  infectionPrecaution: string;
+  observation: string;
+}
+
+
+function ConfirmationModal({
+  data,
+  loading,
+  onCancel,
+  onConfirm,
+}: {
+  data: ConfirmationModalData;
+  loading: boolean;
+  onCancel: () => void;
+  onConfirm: () => void;
+}) {
+  return (
+    <div className="success-modal-backdrop" role="dialog" aria-modal="true">
+      <div className="success-modal confirm-modal">
+        <button type="button" className="success-modal-close" onClick={onCancel} aria-label="Cancelar confirmação" disabled={loading}>
+          <X size={18} />
+        </button>
+
+        <div className="confirm-icon">
+          <ClipboardPlus size={34} />
+        </div>
+
+        <span className="success-kicker">Confirmar solicitação</span>
+        <h2>Revise antes de enviar</h2>
+        <p>
+          Confira os dados do transporte. Após confirmar, o chamado será enviado para distribuição automática.
+        </p>
+
+        <div className="success-route">
+          <div>
+            <small>Origem</small>
+            <strong>{data.originName}</strong>
+          </div>
+          <ArrowRight size={22} />
+          <div>
+            <small>Destino</small>
+            <strong>{data.destinationName}</strong>
+          </div>
+        </div>
+
+        <div className="confirm-summary">
+          <div>
+            <small>Paciente</small>
+            <strong>{data.patientCode}</strong>
+          </div>
+
+          <div>
+            <small>Leito</small>
+            <strong>{data.bedNumber}</strong>
+          </div>
+
+          <div>
+            <small>Transporte</small>
+            <strong>{labelTransportType(data.transportType)}</strong>
+          </div>
+
+          <div>
+            <small>Prioridade</small>
+            <strong className={`confirm-priority ${data.priority.toLowerCase()}`}>{data.priority}</strong>
+          </div>
+
+          <div>
+            <small>Risco</small>
+            <strong className={`confirm-risk ${data.risk.toLowerCase()}`}>{data.risk}</strong>
+          </div>
+
+          <div>
+            <small>Precaução</small>
+            <strong>{data.infectionPrecaution}</strong>
+          </div>
+        </div>
+
+        {data.observation?.trim() && (
+          <div className="confirm-observation">
+            <small>Observações</small>
+            <p>{data.observation}</p>
+          </div>
+        )}
+
+        <div className="success-actions">
+          <button type="button" onClick={onConfirm} disabled={loading}>
+            {loading ? 'Enviando...' : 'Confirmar chamado'}
+          </button>
+          <button type="button" className="light-button" onClick={onCancel} disabled={loading}>
+            Revisar dados
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 
 function SuccessModal({
   data,
@@ -163,6 +261,7 @@ export function CreateCallScreen({ sectors, onCreated }: CreateCallScreenProps) 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [successModal, setSuccessModal] = useState<SuccessModalData | null>(null);
+  const [confirmationModal, setConfirmationModal] = useState<ConfirmationModalData | null>(null);
 
   useEffect(() => {
     setForm((current) => ({
@@ -176,39 +275,68 @@ export function CreateCallScreen({ sectors, onCreated }: CreateCallScreenProps) 
     setForm((current) => ({ ...current, [key]: value }));
   }
 
+  function validateForm() {
+    if (!form.patientCode.trim()) {
+      throw new Error('Informe o nome ou código do paciente.');
+    }
+
+    if (!form.bedNumber.trim()) {
+      throw new Error('Informe o número do leito.');
+    }
+
+    if (!form.originSectorId || !form.destinationSectorId) {
+      throw new Error('Informe origem e destino.');
+    }
+
+    if (form.originSectorId === form.destinationSectorId) {
+      throw new Error('Origem e destino não podem ser iguais.');
+    }
+
+    if (!form.transportType || !form.priority || !form.risk || !form.infectionPrecaution.trim()) {
+      throw new Error('Preencha tipo de transporte, prioridade, risco e precaução.');
+    }
+
+    if (!form.destinationCommunicated || !form.teamConfirmed || !form.equipmentConfirmed) {
+      throw new Error('Confirme o checklist operacional antes de solicitar o transporte.');
+    }
+  }
+
+  function buildConfirmationData(): ConfirmationModalData {
+    return {
+      patientCode: form.patientCode.trim(),
+      bedNumber: form.bedNumber.trim(),
+      originName: findSectorName(sectors, form.originSectorId),
+      destinationName: findSectorName(sectors, form.destinationSectorId),
+      priority: form.priority,
+      risk: form.risk,
+      transportType: form.transportType,
+      infectionPrecaution: form.infectionPrecaution,
+      observation: form.observation,
+    };
+  }
+
   async function handleSubmit(event: FormEvent) {
     event.preventDefault();
+    setError(null);
+
+    try {
+      validateForm();
+      setConfirmationModal(buildConfirmationData());
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Revise os dados do chamado.');
+    }
+  }
+
+  async function handleConfirmCreate() {
     setLoading(true);
     setError(null);
 
     try {
-      if (!form.patientCode.trim()) {
-        throw new Error('Informe o nome ou código do paciente.');
-      }
-
-      if (!form.bedNumber.trim()) {
-        throw new Error('Informe o número do leito.');
-      }
-
-      if (!form.originSectorId || !form.destinationSectorId) {
-        throw new Error('Informe origem e destino.');
-      }
-
-      if (form.originSectorId === form.destinationSectorId) {
-        throw new Error('Origem e destino não podem ser iguais.');
-      }
-
-      if (!form.transportType || !form.priority || !form.risk || !form.infectionPrecaution.trim()) {
-        throw new Error('Preencha tipo de transporte, prioridade, risco e precaução.');
-      }
-
-      if (!form.destinationCommunicated || !form.teamConfirmed || !form.equipmentConfirmed) {
-        throw new Error('Confirme o checklist operacional antes de solicitar o transporte.');
-      }
+      validateForm();
 
       const modalData: SuccessModalData = {
-        patientCode: form.patientCode,
-        bedNumber: form.bedNumber,
+        patientCode: form.patientCode.trim(),
+        bedNumber: form.bedNumber.trim(),
         originName: findSectorName(sectors, form.originSectorId),
         destinationName: findSectorName(sectors, form.destinationSectorId),
         priority: form.priority,
@@ -216,8 +344,14 @@ export function CreateCallScreen({ sectors, onCreated }: CreateCallScreenProps) 
         transportType: form.transportType,
       };
 
-      await createTransportCall(form);
+      await createTransportCall({
+        ...form,
+        patientCode: form.patientCode.trim(),
+        bedNumber: form.bedNumber.trim(),
+        observation: form.observation.trim(),
+      });
 
+      setConfirmationModal(null);
       setForm(initialForm);
       setSuccessModal(modalData);
     } catch (err) {
@@ -267,6 +401,23 @@ export function CreateCallScreen({ sectors, onCreated }: CreateCallScreenProps) 
             inset: 0 0 auto 0;
             height: 8px;
             background: linear-gradient(90deg, #00898b, #20c7c9, #f4bc1c);
+          }
+
+          .confirm-modal::before {
+            background: linear-gradient(90deg, #00898b, #20c7c9, #16a34a);
+          }
+
+          .confirm-icon {
+            width: 78px;
+            height: 78px;
+            margin: 4px auto 18px;
+            display: grid;
+            place-items: center;
+            border-radius: 999px;
+            color: #00898b;
+            background: #e9f8f8;
+            border: 1px solid #cfeeee;
+            box-shadow: 0 16px 36px rgba(0, 137, 139, .14);
           }
 
           .success-modal-close {
@@ -384,6 +535,64 @@ export function CreateCallScreen({ sectors, onCreated }: CreateCallScreenProps) 
             grid-template-columns: repeat(4, 1fr);
             gap: 10px;
             margin-bottom: 18px;
+          }
+
+          .confirm-summary {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 10px;
+            margin-bottom: 18px;
+          }
+
+          .confirm-summary div,
+          .confirm-observation {
+            display: grid;
+            gap: 4px;
+            padding: 12px;
+            border-radius: 14px;
+            background: #fbfcfd;
+            border: 1px solid #edf2f5;
+            text-align: left;
+          }
+
+          .confirm-summary small,
+          .confirm-observation small {
+            color: #667085;
+            font-size: 12px;
+            font-weight: 800;
+            text-transform: uppercase;
+            letter-spacing: .04em;
+          }
+
+          .confirm-summary strong {
+            color: #101828;
+            word-break: break-word;
+          }
+
+          .confirm-priority.urgente,
+          .confirm-risk.medio {
+            color: #b45309;
+          }
+
+          .confirm-priority.critico,
+          .confirm-risk.alto {
+            color: #b42318;
+          }
+
+          .confirm-priority.normal,
+          .confirm-risk.baixo {
+            color: #08747c;
+          }
+
+          .confirm-observation {
+            margin: 0 0 18px;
+          }
+
+          .confirm-observation p {
+            margin: 0;
+            color: #344054;
+            max-width: none;
+            text-align: left;
           }
 
           .success-summary div {
@@ -670,6 +879,15 @@ export function CreateCallScreen({ sectors, onCreated }: CreateCallScreenProps) 
           <span>O chamado será distribuído automaticamente para o maqueiro disponível mais adequado.</span>
         </div>
       </form>
+
+      {confirmationModal && (
+        <ConfirmationModal
+          data={confirmationModal}
+          loading={loading}
+          onCancel={() => setConfirmationModal(null)}
+          onConfirm={handleConfirmCreate}
+        />
+      )}
 
       {successModal && (
         <SuccessModal
