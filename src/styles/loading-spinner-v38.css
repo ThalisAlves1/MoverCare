@@ -1,0 +1,130 @@
+
+/* v38 - Loading com LoaderIcon do lucide-react para Enfermagem */
+.nursing-loading-screen {
+  min-height: 100vh;
+  width: 100%;
+  display: grid;
+  place-items: center;
+  padding: 28px;
+  background:
+    radial-gradient(circle at 18% 16%, rgba(10, 154, 164, 0.18), transparent 32%),
+    radial-gradient(circle at 82% 10%, rgba(35, 203, 167, 0.15), transparent 28%),
+    linear-gradient(135deg, #f7fbfc 0%, #eefafa 48%, #ffffff 100%);
+}
+
+.nursing-loading-card {
+  width: min(520px, 100%);
+  border-radius: 34px;
+  padding: 30px;
+  background: rgba(255, 255, 255, 0.9);
+  border: 1px solid rgba(10, 154, 164, 0.16);
+  box-shadow: 0 34px 100px rgba(12, 73, 84, 0.16);
+  text-align: center;
+  overflow: hidden;
+  position: relative;
+}
+
+.nursing-loading-card::before {
+  content: "";
+  position: absolute;
+  inset: 0 0 auto 0;
+  height: 8px;
+  background: linear-gradient(90deg, #00898b, #20c7c9, #55d6a7);
+}
+
+.nursing-loading-brand {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 28px;
+}
+
+.nursing-loading-brand strong {
+  color: #102033;
+  font-size: 22px;
+  letter-spacing: -0.04em;
+}
+
+.nursing-loading-brand strong span {
+  color: #0a9aa4;
+}
+
+.nursing-loading-brand small {
+  color: #08747c;
+  background: rgba(10, 154, 164, 0.10);
+  border: 1px solid rgba(10, 154, 164, 0.18);
+  border-radius: 999px;
+  padding: 8px 12px;
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.nursing-spinner-area {
+  display: grid;
+  place-items: center;
+  width: 116px;
+  height: 116px;
+  margin: 0 auto 24px;
+  border-radius: 999px;
+  background:
+    radial-gradient(circle, #ffffff 38%, rgba(10, 154, 164, 0.08) 39%, rgba(10, 154, 164, 0.12) 100%);
+  border: 1px solid rgba(10, 154, 164, 0.14);
+  box-shadow: 0 18px 45px rgba(10, 154, 164, 0.16);
+}
+
+.spinner-custom {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.spinner-icon {
+  width: 42px;
+  height: 42px;
+  color: #0a9aa4;
+  animation: nursingSpinnerRotate 0.85s linear infinite;
+}
+
+.nursing-loading-card h1 {
+  margin: 0;
+  color: #102033;
+  font-size: clamp(26px, 4vw, 38px);
+  line-height: 1.05;
+}
+
+.nursing-loading-card p {
+  margin: 12px auto 0;
+  max-width: 430px;
+  color: #667085;
+  font-size: 15px;
+  line-height: 1.55;
+}
+
+@keyframes nursingSpinnerRotate {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (max-width: 760px) {
+  .nursing-loading-card {
+    padding: 22px;
+    border-radius: 26px;
+  }
+
+  .nursing-loading-brand {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .nursing-spinner-area {
+    width: 96px;
+    height: 96px;
+  }
+
+  .spinner-icon {
+    width: 36px;
+    height: 36px;
+  }
+}
