@@ -5,15 +5,15 @@
     "preview": "node ./node_modules/vite/bin/vite.js preview --host 0.0.0.0"
   },
   "dependencies": {
+    "@supabase/supabase-js": "latest",
     "@vitejs/plugin-react": "latest",
-    "vite": "latest",
+    "jspdf": "^2.5.2",
+    "lucide-react": "latest",
+    "qrcode": "latest",
     "react": "latest",
     "react-dom": "latest",
-    "@supabase/supabase-js": "latest",
-    "lucide-react": "latest",
-    "qrcode": "latest"
+    "vite": "latest"
   },
-  "devDependencies": {},
   "name": "movercare-coordenador",
   "version": "1.0.0",
   "private": true,

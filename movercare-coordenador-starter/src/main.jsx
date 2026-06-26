@@ -1,8 +1,11 @@
 import React, { useEffect, useMemo, useState } from 'react'
 import { createRoot } from 'react-dom/client'
 import QRCode from 'qrcode'
+import jsPDF from 'jspdf'
 import { LoaderIcon, SquareEqual } from 'lucide-react'
 import { supabase } from './supabaseClient'
+import logoTopo from './assets/logo_topo.png'
+import fluxoTransporteHospitalar from './assets/fluxo_de_transporte_hospitalar.png'
 import './styles.css'
 import './styles/loading-spinner-v37.css'
 import './styles/logout-v35.css'
@@ -73,6 +76,8 @@ const EMPTY_SECTOR_FORM = {
   qr_token: '',
   active: true
 }
+
+const PASSWORD_RECOVERY_EMAIL = 'suporte@movercare.com.br'
 
 function formatValue(value) {
   if (!value) return '-'
@@ -255,11 +260,7 @@ function slugQrToken(name) {
 function BrandLogo() {
   return (
     <div className="brand-logo">
-      <div className="logo-cross">
-        <span />
-        <span />
-      </div>
-      <strong>Mover<span>Care</span></strong>
+      <img src={logoTopo} alt="MoverCare" className="brand-logo-img" />
     </div>
   )
 }
@@ -268,7 +269,22 @@ function Login({ onLogged }) {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [loading, setLoading] = useState(false)
+  const [pointerPosition, setPointerPosition] = useState({ x: 50, y: 50 })
   const [error, setError] = useState('')
+  const recoverySubject = encodeURIComponent('Recuperação de senha - MoverCare')
+  const recoveryBody = encodeURIComponent('Olá, preciso de ajuda para recuperar meu acesso ao MoverCare.')
+  const recoveryHref = `mailto:${PASSWORD_RECOVERY_EMAIL}?subject=${recoverySubject}&body=${recoveryBody}`
+
+  function handlePointerMove(event) {
+    const rect = event.currentTarget.getBoundingClientRect()
+    const x = Math.round(((event.clientX - rect.left) / rect.width) * 100)
+    const y = Math.round(((event.clientY - rect.top) / rect.height) * 100)
+
+    setPointerPosition({
+      x: Math.min(100, Math.max(0, x)),
+      y: Math.min(100, Math.max(0, y))
+    })
+  }
 
   async function handleLogin(e) {
     e.preventDefault()
@@ -288,7 +304,14 @@ function Login({ onLogged }) {
   }
 
   return (
-    <div className="login-page">
+    <div
+      className="login-page interactive-login-bg"
+      onPointerMove={handlePointerMove}
+      style={{
+        '--mouse-x': `${pointerPosition.x}%`,
+        '--mouse-y': `${pointerPosition.y}%`
+      }}
+    >
       <header className="login-header">
         <BrandLogo />
         <div className="login-help">
@@ -303,37 +326,42 @@ function Login({ onLogged }) {
           <h1>Gestão inteligente do transporte intra-hospitalar</h1>
           <p>Organize, acompanhe e otimize o transporte de pacientes, equipamentos e materiais com segurança e eficiência.</p>
 
-          <div className="hospital-illustration">
-            <div className="doctor-figure" />
-            <div className="bed-figure" />
-            <div className="patient-figure" />
+          <div className="hospital-illustration flow-illustration option-three">
+            <img
+              src={fluxoTransporteHospitalar}
+              alt="Fluxo do transporte hospitalar: origem, transporte, elevador, leito e destino"
+            />
           </div>
 
           <div className="feature-list">
             <div>
               <span className="line-icon">□</span>
               <strong>Segurança</strong>
-              <small>Processos padronizados e rastreáveis</small>
+              <small>Processos padronizados e rastreáveis para reduzir riscos e aumentar a segurança.</small>
             </div>
             <div>
               <span className="line-icon">◷</span>
               <strong>Agilidade</strong>
-              <small>Fluxos inteligentes e integrados</small>
+              <small>Fluxos inteligentes para agilizar chamados, deslocamentos e atendimentos.</small>
             </div>
             <div>
               <span className="line-icon">▥</span>
               <strong>Visão</strong>
-              <small>Relatórios e indicadores em tempo real</small>
+              <small>Indicadores em tempo real para acompanhar desempenho e tomar decisões rápidas.</small>
             </div>
           </div>
         </section>
 
         <form className="login-card" onSubmit={handleLogin}>
-          <h2>Bem-vindo ao <span>MoverCare</span></h2>
-          <p>Acesse sua conta para continuar</p>
+          <div className="coordinator-login-badge">
+            <span>Portal do Coordenador</span>
+          </div>
+
+          <h2>Gestão de <span>Coordenação</span></h2>
+          <p>Acesse o painel do coordenador para acompanhar chamados, equipes e indicadores em tempo real.</p>
 
           <label>Usuário ou e-mail</label>
-          <input value={email} onChange={(e) => setEmail(e.target.value)} type="email" placeholder="Digite seu usuário ou e-mail" required />
+          <input value={email} onChange={(e) => setEmail(e.target.value)} type="text" placeholder="Digite seu usuário ou e-mail" required />
 
           <label>Senha</label>
           <input value={password} onChange={(e) => setPassword(e.target.value)} type="password" placeholder="Digite sua senha" required />
@@ -343,10 +371,10 @@ function Login({ onLogged }) {
               <input type="checkbox" defaultChecked />
               Lembrar de mim
             </label>
-            <a>Esqueci minha senha</a>
+            <a href={recoveryHref}>Esqueci minha senha</a>
           </div>
 
-          {error && <div className="error">{error}</div>}
+          {error && <div className="login-error-soft">{error}</div>}
 
           <button disabled={loading}>
             {loading ? 'Entrando...' : 'Entrar'}
@@ -1094,17 +1122,522 @@ function CallsPage({
   )
 }
 
-function MaqueirosPage({ maqueiros, profile, refreshData, loading }) {
+
+function getCallReferenceDate(call) {
+  return call.completed_at || call.created_at || call.assigned_at || null
+}
+
+function getCurrentMonthValue() {
+  const now = new Date()
+  const month = String(now.getMonth() + 1).padStart(2, '0')
+  return `${now.getFullYear()}-${month}`
+}
+
+function isSameMonth(dateString, monthValue) {
+  if (!dateString || !monthValue) return false
+
+  const date = new Date(dateString)
+  if (Number.isNaN(date.getTime())) return false
+
+  const [year, month] = monthValue.split('-').map(Number)
+  return date.getFullYear() === year && date.getMonth() + 1 === month
+}
+
+function getMonthLabel(monthValue = getCurrentMonthValue()) {
+  if (!monthValue) return 'Mês não informado'
+
+  const [year, month] = monthValue.split('-').map(Number)
+  const date = new Date(year, month - 1, 1)
+
+  return new Intl.DateTimeFormat('pt-BR', {
+    month: 'long',
+    year: 'numeric'
+  }).format(date)
+}
+
+function getMaqueiroName(maqueiro) {
+  return maqueiro?.full_name || maqueiro?.name || 'Maqueiro'
+}
+
+function getMaqueiroCallsForMonth(maqueiro, calls, monthValue) {
+  return calls
+    .filter(call => {
+      const assignedId = call.assigned_maqueiro_id || call.maqueiro?.id
+      if (assignedId !== maqueiro.id) return false
+
+      return isSameMonth(getCallReferenceDate(call), monthValue)
+    })
+    .slice()
+    .sort((a, b) => {
+      const dateA = new Date(getCallReferenceDate(a) || 0).getTime()
+      const dateB = new Date(getCallReferenceDate(b) || 0).getTime()
+      return dateB - dateA
+    })
+}
+
+function buildMaqueiroMonthlyProgress(maqueiro, calls, monthValue) {
+  const monthCalls = getMaqueiroCallsForMonth(maqueiro, calls, monthValue)
+  const finished = monthCalls.filter(call => call.status === 'CONCLUIDO' || call.completed_at)
+  const active = monthCalls.filter(call => ACTIVE_STATUSES.includes(call.status))
+  const delayed = monthCalls.filter(call => {
+    const sla = getCallSla(call)
+    return call.status === 'ATRASADO' || sla.deadlineTone === 'danger-soft'
+  })
+
+  const totalSeconds = finished
+    .map(call => getCallSla(call).totalSeconds)
+    .filter(value => Number.isFinite(value))
+
+  const transportSeconds = finished
+    .map(call => getCallSla(call).transportSeconds)
+    .filter(value => Number.isFinite(value))
+
+  const acceptSeconds = monthCalls
+    .map(call => getCallSla(call).acceptSeconds)
+    .filter(value => Number.isFinite(value))
+
+  const totalOperationSeconds = totalSeconds.reduce((sum, value) => sum + value, 0)
+  const onTime = finished.filter(call => getCallSla(call).deadlineTone !== 'danger-soft')
+  const onTimePercent = finished.length ? Math.round((onTime.length / finished.length) * 100) : 0
+
+  return {
+    maqueiro,
+    monthCalls,
+    finished,
+    active,
+    delayed,
+    total: monthCalls.length,
+    completed: finished.length,
+    activeCount: active.length,
+    delayedCount: delayed.length,
+    avgAcceptSeconds: averageSeconds(acceptSeconds),
+    avgTransportSeconds: averageSeconds(transportSeconds),
+    avgTotalSeconds: averageSeconds(totalSeconds),
+    totalOperationSeconds,
+    onTimePercent,
+    lastCall: monthCalls[0] || null
+  }
+}
+
+
+function sanitizeFileName(value) {
+  return String(value || 'relatorio')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-zA-Z0-9-_]+/g, '-')
+    .replace(/-+/g, '-')
+    .replace(/^-|-$/g, '')
+    .toLowerCase()
+}
+
+function safePdfText(value) {
+  if (value === null || value === undefined || value === '') return '-'
+  return String(value)
+}
+
+function getPdfDateTime() {
+  return new Intl.DateTimeFormat('pt-BR', {
+    dateStyle: 'short',
+    timeStyle: 'short'
+  }).format(new Date())
+}
+
+
+function splitPdfText(doc, value, maxWidth) {
+  return doc.splitTextToSize(safePdfText(value), maxWidth)
+}
+
+function drawPdfCell(doc, text, x, y, width, height, options = {}) {
+  const {
+    fill = null,
+    textColor = [15, 23, 42],
+    fontStyle = 'normal',
+    fontSize = 8,
+    align = 'left'
+  } = options
+
+  if (fill) {
+    doc.setFillColor(...fill)
+    doc.rect(x, y, width, height, 'F')
+  }
+
+  doc.setDrawColor(220, 232, 239)
+  doc.setLineWidth(0.15)
+  doc.rect(x, y, width, height)
+
+  doc.setTextColor(...textColor)
+  doc.setFont('helvetica', fontStyle)
+  doc.setFontSize(fontSize)
+
+  const padding = 2
+  const lines = splitPdfText(doc, text, width - padding * 2).slice(0, 2)
+  const textX = align === 'center' ? x + width / 2 : x + padding
+  doc.text(lines, textX, y + 5, { align })
+}
+
+function ensurePdfPageSpace(doc, y, neededHeight, pageWidth, pageHeight) {
+  if (y + neededHeight <= pageHeight - 14) return y
+
+  doc.addPage()
+  doc.setFillColor(6, 43, 88)
+  doc.rect(0, 0, pageWidth, 15, 'F')
+  doc.setTextColor(255, 255, 255)
+  doc.setFont('helvetica', 'bold')
+  doc.setFontSize(10)
+  doc.text('Relatório de maqueiros', 14, 10)
+  return 22
+}
+
+function ProgressKpi({ label, value, helper }) {
+  return (
+    <article className="maqueiro-progress-kpi">
+      <span>{label}</span>
+      <strong>{value}</strong>
+      {helper && <small>{helper}</small>}
+    </article>
+  )
+}
+
+function MaqueiroProgressCard({ progress }) {
+  const { maqueiro, total, completed, activeCount, delayedCount, avgTransportSeconds, totalOperationSeconds, onTimePercent, lastCall } = progress
+  const initials = String(getMaqueiroName(maqueiro)).slice(0, 1).toUpperCase()
+  const efficiencyTone = onTimePercent >= 90 ? 'ok' : onTimePercent >= 70 ? 'warn' : 'danger'
+
+  return (
+    <article className="maqueiro-progress-card">
+      <div className="maqueiro-progress-card-head">
+        <div className="person-cell">
+          <span className="avatar">{initials}</span>
+          <div>
+            <strong>{getMaqueiroName(maqueiro)}</strong>
+            <small>{maqueiro.current_sector_name || getSectorNameFromMaqueiro(maqueiro) || 'Sem setor informado'}</small>
+          </div>
+        </div>
+
+        <StatusPill value={maqueiro.status || 'SEM_STATUS'} />
+      </div>
+
+      <div className="maqueiro-progress-numbers">
+        <div>
+          <small>Transportes</small>
+          <strong>{total}</strong>
+        </div>
+
+        <div>
+          <small>Concluídos</small>
+          <strong>{completed}</strong>
+        </div>
+
+        <div>
+          <small>Em andamento</small>
+          <strong>{activeCount}</strong>
+        </div>
+
+        <div>
+          <small>Atrasos</small>
+          <strong className={delayedCount > 0 ? 'danger-text' : ''}>{delayedCount}</strong>
+        </div>
+      </div>
+
+      <div className="maqueiro-progress-bars">
+        <div>
+          <span>
+            <b>SLA no prazo</b>
+            <small>{completed ? `${onTimePercent}%` : 'Sem concluídos'}</small>
+          </span>
+          <em>
+            <i className={efficiencyTone} style={{ width: `${Math.max(0, Math.min(100, onTimePercent))}%` }} />
+          </em>
+        </div>
+      </div>
+
+      <div className="maqueiro-progress-details">
+        <div>
+          <small>Tempo médio transporte</small>
+          <strong>{formatSeconds(avgTransportSeconds)}</strong>
+        </div>
+
+        <div>
+          <small>Tempo total</small>
+          <strong>{formatSeconds(totalOperationSeconds)}</strong>
+        </div>
+      </div>
+
+      {lastCall ? (
+        <div className="maqueiro-progress-last">
+          <small>Último transporte</small>
+          <strong>#{lastCall.number} • {formatValue(lastCall.status)}</strong>
+          <span>{lastCall.origin?.name || '-'} → {lastCall.destination?.name || '-'}</span>
+        </div>
+      ) : (
+        <div className="maqueiro-progress-last empty">
+          <small>Último transporte</small>
+          <strong>Nenhum registro neste mês</strong>
+        </div>
+      )}
+    </article>
+  )
+}
+
+
+function MaqueirosPage({ maqueiros, calls, profile, refreshData, loading }) {
+  const [selectedMonth, setSelectedMonth] = useState(getCurrentMonthValue())
+  const selectedMonthLabel = getMonthLabel(selectedMonth)
+
+  const progressList = useMemo(() => {
+    return maqueiros
+      .map(maqueiro => buildMaqueiroMonthlyProgress(maqueiro, calls, selectedMonth))
+      .sort((a, b) => b.completed - a.completed || b.total - a.total || getMaqueiroName(a.maqueiro).localeCompare(getMaqueiroName(b.maqueiro)))
+  }, [maqueiros, calls, selectedMonth])
+
+  const totalTransports = progressList.reduce((sum, item) => sum + item.total, 0)
+  const totalCompleted = progressList.reduce((sum, item) => sum + item.completed, 0)
+  const totalDelayed = progressList.reduce((sum, item) => sum + item.delayedCount, 0)
+  const totalOperationSeconds = progressList.reduce((sum, item) => sum + item.totalOperationSeconds, 0)
+  const avgTeamTransport = averageSeconds(
+    progressList
+      .map(item => item.avgTransportSeconds)
+      .filter(value => Number.isFinite(value))
+  )
+  const bestPerformer = progressList.find(item => item.completed > 0)
+
+  function handleDownloadPdf() {
+    try {
+      const doc = new jsPDF({
+        orientation: 'landscape',
+        unit: 'mm',
+        format: 'a4'
+      })
+
+      const pageWidth = doc.internal.pageSize.getWidth()
+      const pageHeight = doc.internal.pageSize.getHeight()
+      const generatedAt = getPdfDateTime()
+
+      doc.setFillColor(6, 43, 88)
+      doc.rect(0, 0, pageWidth, 30, 'F')
+
+      doc.setTextColor(255, 255, 255)
+      doc.setFont('helvetica', 'bold')
+      doc.setFontSize(18)
+      doc.text('Relatório de desempenho dos maqueiros', 14, 13)
+
+      doc.setFont('helvetica', 'normal')
+      doc.setFontSize(10)
+      doc.text(`Período: ${selectedMonthLabel}`, 14, 22)
+      doc.text(`Gerado em: ${generatedAt}`, pageWidth - 14, 22, { align: 'right' })
+
+      let y = 40
+
+      doc.setTextColor(6, 43, 88)
+      doc.setFont('helvetica', 'bold')
+      doc.setFontSize(12)
+      doc.text('Resumo geral', 14, y)
+      y += 6
+
+      const summaryCards = [
+        ['Transportes', safePdfText(totalTransports)],
+        ['Concluídos', safePdfText(totalCompleted)],
+        ['Atrasos', safePdfText(totalDelayed)],
+        ['Tempo médio', safePdfText(formatSeconds(avgTeamTransport))],
+        ['Tempo total', safePdfText(formatSeconds(totalOperationSeconds))]
+      ]
+
+      const cardGap = 4
+      const cardWidth = (pageWidth - 28 - cardGap * (summaryCards.length - 1)) / summaryCards.length
+      summaryCards.forEach(([label, value], index) => {
+        const x = 14 + index * (cardWidth + cardGap)
+        doc.setFillColor(245, 250, 252)
+        doc.roundedRect(x, y, cardWidth, 22, 3, 3, 'F')
+        doc.setDrawColor(220, 232, 239)
+        doc.roundedRect(x, y, cardWidth, 22, 3, 3, 'S')
+        doc.setTextColor(100, 116, 139)
+        doc.setFont('helvetica', 'bold')
+        doc.setFontSize(7)
+        doc.text(label.toUpperCase(), x + 3, y + 7)
+        doc.setTextColor(6, 43, 88)
+        doc.setFontSize(13)
+        doc.text(value, x + 3, y + 16)
+      })
+
+      y += 34
+
+      if (bestPerformer) {
+        doc.setFillColor(235, 251, 252)
+        doc.roundedRect(14, y, pageWidth - 28, 13, 3, 3, 'F')
+        doc.setTextColor(6, 43, 88)
+        doc.setFont('helvetica', 'bold')
+        doc.setFontSize(9)
+        doc.text(
+          `Destaque do período: ${getMaqueiroName(bestPerformer.maqueiro)} • ${bestPerformer.completed} concluído(s) • ${bestPerformer.onTimePercent}% no prazo`,
+          18,
+          y + 8
+        )
+        y += 21
+      }
+
+      doc.setTextColor(6, 43, 88)
+      doc.setFont('helvetica', 'bold')
+      doc.setFontSize(12)
+      doc.text('Detalhamento por maqueiro', 14, y)
+      y += 6
+
+      const columns = [
+        { label: 'Maqueiro', key: 'maqueiro', width: 34 },
+        { label: 'Setor', key: 'setor', width: 30 },
+        { label: 'Status', key: 'status', width: 23 },
+        { label: 'Transp.', key: 'transportes', width: 16, align: 'center' },
+        { label: 'Conc.', key: 'concluidos', width: 15, align: 'center' },
+        { label: 'Andam.', key: 'andamento', width: 16, align: 'center' },
+        { label: 'Atrasos', key: 'atrasos', width: 16, align: 'center' },
+        { label: 'SLA', key: 'sla', width: 14, align: 'center' },
+        { label: 'Médio', key: 'medio', width: 20 },
+        { label: 'Total', key: 'total', width: 20 },
+        { label: 'Último transporte', key: 'ultimo', width: 52 }
+      ]
+
+      const rows = progressList.map((item) => ({
+        maqueiro: getMaqueiroName(item.maqueiro),
+        setor: item.maqueiro.current_sector_name || getSectorNameFromMaqueiro(item.maqueiro) || '-',
+        status: formatValue(item.maqueiro.status || 'SEM_STATUS'),
+        transportes: item.total,
+        concluidos: item.completed,
+        andamento: item.activeCount,
+        atrasos: item.delayedCount,
+        sla: item.completed ? `${item.onTimePercent}%` : '-',
+        medio: formatSeconds(item.avgTransportSeconds),
+        total: formatSeconds(item.totalOperationSeconds),
+        ultimo: item.lastCall ? `#${item.lastCall.number} - ${formatValue(item.lastCall.status)}` : '-'
+      }))
+
+      if (rows.length === 0) {
+        doc.setTextColor(100, 116, 139)
+        doc.setFont('helvetica', 'normal')
+        doc.setFontSize(11)
+        doc.text('Nenhum dado encontrado para o período selecionado.', 14, y + 8)
+      } else {
+        const rowHeight = 10
+        const headerHeight = 9
+
+        y = ensurePdfPageSpace(doc, y, headerHeight + rowHeight, pageWidth, pageHeight)
+
+        let x = 14
+        columns.forEach((col) => {
+          drawPdfCell(doc, col.label, x, y, col.width, headerHeight, {
+            fill: [6, 43, 88],
+            textColor: [255, 255, 255],
+            fontStyle: 'bold',
+            fontSize: 7,
+            align: col.align || 'left'
+          })
+          x += col.width
+        })
+        y += headerHeight
+
+        rows.forEach((row, rowIndex) => {
+          y = ensurePdfPageSpace(doc, y, rowHeight, pageWidth, pageHeight)
+
+          let cellX = 14
+          columns.forEach((col) => {
+            drawPdfCell(doc, row[col.key], cellX, y, col.width, rowHeight, {
+              fill: rowIndex % 2 === 0 ? [255, 255, 255] : [245, 250, 252],
+              textColor: [15, 23, 42],
+              fontSize: 7,
+              align: col.align || 'left'
+            })
+            cellX += col.width
+          })
+          y += rowHeight
+        })
+      }
+
+      const totalPages = doc.internal.getNumberOfPages()
+      for (let page = 1; page <= totalPages; page += 1) {
+        doc.setPage(page)
+        doc.setFont('helvetica', 'normal')
+        doc.setFontSize(8)
+        doc.setTextColor(100, 116, 139)
+        doc.text('MoverCare - Portal do Coordenador', 14, pageHeight - 8)
+        doc.text(`Página ${page} de ${totalPages}`, pageWidth - 14, pageHeight - 8, { align: 'right' })
+      }
+
+      doc.save(`relatorio-maqueiros-${sanitizeFileName(selectedMonthLabel)}.pdf`)
+    } catch (error) {
+      console.error('Erro ao gerar PDF:', error)
+      alert('Não foi possível gerar o PDF. Verifique se a biblioteca jsPDF foi instalada com: npm install jspdf')
+    }
+  }
+
   return (
     <>
       <PageHeader
         title="Maqueiros"
-        subtitle="Acompanhe status, localização operacional e disponibilidade da equipe"
+        subtitle="Acompanhe status, produtividade mensal, tempo de transporte e evolução da equipe"
         profile={profile}
         right={<button onClick={refreshData} disabled={loading}>Atualizar</button>}
       />
 
-      <section className="panel table-panel">
+      <section className="panel maqueiro-progress-panel maqueiro-report-area">
+        <div className="maqueiro-progress-title">
+          <div>
+            <span className="section-kicker">Desempenho mensal</span>
+            <h2>Progresso dos maqueiros</h2>
+            <p>Resumo de {selectedMonthLabel} com quantidade de transportes, tempo médio, atrasos e últimos atendimentos.</p>
+          </div>
+
+          <div className="maqueiro-report-actions no-pdf">
+            <label>
+              <span>Filtrar mês</span>
+              <input
+                type="month"
+                value={selectedMonth}
+                onChange={(event) => setSelectedMonth(event.target.value || getCurrentMonthValue())}
+              />
+            </label>
+
+            <button type="button" className="light-button" onClick={() => setSelectedMonth(getCurrentMonthValue())}>
+              Mês atual
+            </button>
+
+            <button type="button" onClick={handleDownloadPdf}>
+              Gerar PDF
+            </button>
+          </div>
+
+          <span className="month-badge pdf-only">{selectedMonthLabel}</span>
+        </div>
+
+        <div className="maqueiro-progress-summary">
+          <ProgressKpi label="Transportes do período" value={totalTransports} helper={`${totalCompleted} concluídos`} />
+          <ProgressKpi label="Tempo médio transporte" value={formatSeconds(avgTeamTransport)} helper="média da equipe" />
+          <ProgressKpi label="Tempo total operacional" value={formatSeconds(totalOperationSeconds)} helper="soma dos concluídos" />
+          <ProgressKpi label="Atrasos no período" value={totalDelayed} helper="SLA estourado ou atrasado" />
+        </div>
+
+        {bestPerformer && (
+          <div className="maqueiro-progress-highlight">
+            <span>🏆 Destaque do período</span>
+            <strong>{getMaqueiroName(bestPerformer.maqueiro)}</strong>
+            <small>{bestPerformer.completed} transporte{bestPerformer.completed === 1 ? '' : 's'} concluído{bestPerformer.completed === 1 ? '' : 's'} • {bestPerformer.onTimePercent}% no prazo</small>
+          </div>
+        )}
+
+        <div className="maqueiro-progress-grid">
+          {progressList.length === 0 && <div className="empty-row">Nenhum maqueiro encontrado.</div>}
+
+          {progressList.map(progress => (
+            <MaqueiroProgressCard key={progress.maqueiro.id} progress={progress} />
+          ))}
+        </div>
+      </section>
+
+      <section className="panel table-panel no-pdf">
+        <div className="panel-title-row">
+          <div>
+            <h2>Status da equipe</h2>
+            <span className="count-badge">{maqueiros.length}</span>
+          </div>
+        </div>
+
         <div className="team-table">
           <div className="team-head">
             <span>Maqueiro</span>
@@ -1134,7 +1667,6 @@ function MaqueirosPage({ maqueiros, profile, refreshData, loading }) {
     </>
   )
 }
-
 function SectorsPage(props) {
   const {
     sectors, sectorForm, setSectorForm, sectorSaving, saveSector, generateTokenForForm,
@@ -1704,6 +2236,8 @@ function App() {
   const [session, setSession] = useState(null)
   const [profile, setProfile] = useState(null)
   const [activePage, setActivePage] = useState('overview')
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
+  const [panelTheme, setPanelTheme] = useState('light')
   const [checking, setChecking] = useState(true)
   const [loading, setLoading] = useState(false)
   const [calls, setCalls] = useState([])
@@ -2112,9 +2646,21 @@ function App() {
   }
 
   return (
-    <div className="app-shell">
+    <div className={`app-shell coord-shell ${sidebarCollapsed ? 'coord-shell--collapsed' : ''} ${panelTheme === 'dark' ? 'coord-shell--dark' : ''}`}>
       <aside className="sidebar no-print">
-        <BrandLogo />
+        <div className="coord-sidebar-top">
+          <BrandLogo />
+
+          <button
+            type="button"
+            className="coord-sidebar-toggle"
+            onClick={() => setSidebarCollapsed((current) => !current)}
+            aria-label={sidebarCollapsed ? 'Expandir menu' : 'Recolher menu'}
+          >
+            <Menu size={18} />
+            <span>{sidebarCollapsed ? 'Abrir' : 'Recolher'}</span>
+          </button>
+        </div>
 
         <nav className="sidebar-nav">
           {PAGES.map(page => (
@@ -2125,13 +2671,22 @@ function App() {
               onClick={() => setActivePage(page.id)}
             >
               <span>{page.mark}</span>
-              {page.label}
+              <span className="sidebar-nav-label">{page.label}</span>
             </button>
           ))}
         </nav>
 
         <div className="sidebar-bottom">
           <strong>Segurança e qualidade em cada movimento.</strong>
+
+          <button
+            type="button"
+            className="coord-theme-button"
+            onClick={() => setPanelTheme((current) => current === 'light' ? 'dark' : 'light')}
+          >
+            <span>{panelTheme === 'dark' ? '☀' : '☾'}</span>
+            {panelTheme === 'dark' ? 'Modo claro' : 'Modo escuro'}
+          </button>
 
           <button type="button" className="logout-button" onClick={logout}>
             <span>↩</span>
@@ -2146,6 +2701,13 @@ function App() {
         <div className="mobile-brand no-print">
           <BrandLogo />
           <div className="mobile-actions">
+            <button
+              type="button"
+              className="coord-mobile-theme"
+              onClick={() => setPanelTheme((current) => current === 'light' ? 'dark' : 'light')}
+            >
+              {panelTheme === 'dark' ? 'Claro' : 'Escuro'}
+            </button>
             <button onClick={refreshData} disabled={loading}>Atualizar</button>
             <button type="button" className="logout-button mobile-logout" onClick={logout}>Sair</button>
           </div>
@@ -2212,6 +2774,7 @@ function App() {
           {activePage === 'maqueiros' && (
             <MaqueirosPage
               maqueiros={maqueiros}
+              calls={calls}
               profile={profile}
               refreshData={refreshData}
               loading={loading}
