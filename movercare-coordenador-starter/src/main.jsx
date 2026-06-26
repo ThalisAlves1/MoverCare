@@ -45,6 +45,7 @@ const PAGES = [
   { id: 'map', label: 'Mapa', mark: <LocateFixed size={24} /> },
   { id: 'sectors', label: 'Setores', mark: '▦' },
   { id: 'qrcodes', label: 'QR Codes', mark: <ScanQrCode size={24} /> },
+  { id: 'settings', label: 'Configurações', mark: '⚙' },
   { id: 'profile', label: 'Perfil', mark: '👤' }
 ]
 
@@ -76,6 +77,80 @@ const EMPTY_SECTOR_FORM = {
   qr_token: '',
   active: true
 }
+
+const COORD_SETTINGS_STORAGE_KEY = 'movercare_coord_settings_v1'
+const COORD_AUDIT_STORAGE_KEY = 'movercare_coord_audit_v1'
+
+const DEFAULT_COORDINATOR_SETTINGS = {
+  acceptDeadlineMinutes: 8,
+  originDeadlineMinutes: 15,
+  transportLongMinutes: 45,
+  idleAlertMinutes: 90,
+  sectorAlertMinCalls: 3,
+  autoRefreshSeconds: 10,
+  priorityDefault: 'NORMAL',
+  notifyNewCalls: true,
+  notifyDelayedCalls: true,
+  notifyUnassignedCalls: true,
+  criticalSectorIds: []
+}
+
+function readStoredJson(key, fallback) {
+  try {
+    if (typeof window === 'undefined' || !window.localStorage) return fallback
+
+    const stored = window.localStorage.getItem(key)
+    if (!stored) return fallback
+
+    return JSON.parse(stored)
+  } catch (_error) {
+    return fallback
+  }
+}
+
+function writeStoredJson(key, value) {
+  try {
+    if (typeof window === 'undefined' || !window.localStorage) return
+    window.localStorage.setItem(key, JSON.stringify(value))
+  } catch (_error) {
+    // Mantém a aplicação funcionando mesmo se o navegador bloquear localStorage.
+  }
+}
+
+function normalizeCoordinatorSettings(settings = {}) {
+  const merged = {
+    ...DEFAULT_COORDINATOR_SETTINGS,
+    ...(settings || {})
+  }
+
+  return {
+    ...merged,
+    acceptDeadlineMinutes: Math.max(1, Number(merged.acceptDeadlineMinutes) || DEFAULT_COORDINATOR_SETTINGS.acceptDeadlineMinutes),
+    originDeadlineMinutes: Math.max(1, Number(merged.originDeadlineMinutes) || DEFAULT_COORDINATOR_SETTINGS.originDeadlineMinutes),
+    transportLongMinutes: Math.max(1, Number(merged.transportLongMinutes) || DEFAULT_COORDINATOR_SETTINGS.transportLongMinutes),
+    idleAlertMinutes: Math.max(1, Number(merged.idleAlertMinutes) || DEFAULT_COORDINATOR_SETTINGS.idleAlertMinutes),
+    sectorAlertMinCalls: Math.max(1, Number(merged.sectorAlertMinCalls) || DEFAULT_COORDINATOR_SETTINGS.sectorAlertMinCalls),
+    autoRefreshSeconds: Math.max(5, Number(merged.autoRefreshSeconds) || DEFAULT_COORDINATOR_SETTINGS.autoRefreshSeconds),
+    notifyNewCalls: Boolean(merged.notifyNewCalls),
+    notifyDelayedCalls: Boolean(merged.notifyDelayedCalls),
+    notifyUnassignedCalls: Boolean(merged.notifyUnassignedCalls),
+    criticalSectorIds: Array.isArray(merged.criticalSectorIds) ? merged.criticalSectorIds.map(String) : []
+  }
+}
+
+function buildAuditEntry(type, description, profile, metadata = {}) {
+  return {
+    id: `${Date.now()}-${Math.random().toString(16).slice(2)}`,
+    type,
+    description,
+    user_id: profile?.id || null,
+    user: profile?.full_name || profile?.name || profile?.email || 'Coordenador',
+    user_email: profile?.email || '',
+    created_at: new Date().toISOString(),
+    metadata
+  }
+}
+
 
 const PASSWORD_RECOVERY_EMAIL = 'suporte@movercare.com.br'
 
@@ -702,7 +777,7 @@ function SectorQrCard({ sector }) {
   )
 }
 
-function CallRows({ calls, maqueiros, selectedMaqueiroByCall, setSelectedMaqueiroByCall, reassignCall, loading, compact }) {
+function CallRows({ calls, maqueiros, selectedMaqueiroByCall, setSelectedMaqueiroByCall, reassignCall, loading, compact, onOpenDetails }) {
   return (
     <div className={`sla-call-list ${compact ? 'compact' : ''}`}>
       {calls.length === 0 && <div className="empty-row">Nenhum chamado encontrado.</div>}
@@ -725,6 +800,9 @@ function CallRows({ calls, maqueiros, selectedMaqueiroByCall, setSelectedMaqueir
               <div className="sla-call-badges">
                 <StatusPill value={call.status} />
                 <SoftPill tone={sla.deadlineTone}>{sla.deadlineStatus}</SoftPill>
+                <button type="button" className="call-details-chip" onClick={() => onOpenDetails?.(call.id)}>
+                  Detalhes
+                </button>
               </div>
             </div>
 
@@ -862,8 +940,13 @@ function getCallAgeMinutes(call) {
   return Math.max(0, Math.round((Date.now() - start.getTime()) / 60000))
 }
 
-function buildCoordinatorAlerts(calls, maqueiros, sectors) {
+function buildCoordinatorAlerts(calls, maqueiros, sectors, settings = DEFAULT_COORDINATOR_SETTINGS) {
   const alerts = []
+  const config = normalizeCoordinatorSettings(settings)
+  const longTransportSeconds = config.transportLongMinutes * 60
+  const idleLimitMinutes = config.idleAlertMinutes
+  const sectorAlertMinCalls = config.sectorAlertMinCalls
+  const criticalSectorIds = new Set((config.criticalSectorIds || []).map(String))
 
   calls.forEach(call => {
     const sla = getCallSla(call)
@@ -887,7 +970,7 @@ function buildCoordinatorAlerts(calls, maqueiros, sectors) {
         meta: age !== null ? `${age} min aguardando` : 'Aguardando atribuição',
         call
       })
-    } else if (ACTIVE_STATUSES.includes(call.status) && getCallSla(call).totalSeconds > 45 * 60) {
+    } else if (ACTIVE_STATUSES.includes(call.status) && getCallSla(call).totalSeconds > longTransportSeconds) {
       alerts.push({
         id: `longo-${call.id}`,
         tone: 'warn',
@@ -905,7 +988,7 @@ function buildCoordinatorAlerts(calls, maqueiros, sectors) {
       ? Math.round((Date.now() - lastUpdate.getTime()) / 60000)
       : null
 
-    if (maqueiro.status === 'DISPONIVEL' && minutesIdle !== null && minutesIdle >= 90) {
+    if (maqueiro.status === 'DISPONIVEL' && minutesIdle !== null && minutesIdle >= idleLimitMinutes) {
       alerts.push({
         id: `idle-${maqueiro.id}`,
         tone: 'info',
@@ -917,7 +1000,7 @@ function buildCoordinatorAlerts(calls, maqueiros, sectors) {
   })
 
   buildSectorDemand(calls.filter(call => ACTIVE_STATUSES.includes(call.status)), sectors)
-    .filter(item => item.total >= 3)
+    .filter(item => item.total >= sectorAlertMinCalls || criticalSectorIds.has(String(item.sector.id)))
     .slice(0, 2)
     .forEach(item => {
       alerts.push({
@@ -1124,15 +1207,581 @@ function PeakHoursPanel({ peaks }) {
   )
 }
 
+
+function getCallBed(call) {
+  const sources = [call?.patient_code, call?.observation].filter(Boolean).join('\n')
+  const match = sources.match(/leito\s*:?\s*([^|\n]+)/i)
+  return match ? match[1].trim() : '-'
+}
+
+function getCleanPatientCode(call) {
+  const value = call?.patient_code || ''
+  return value.split('|')[0]?.trim() || value || 'Paciente não informado'
+}
+
+function getTimelineStepStatus(step, call) {
+  if (step.time) return 'done'
+
+  const status = call?.status
+  if (status === 'CANCELADO') return 'cancelled'
+  if (step.key === 'assigned' && !call?.assigned_maqueiro_id) return 'waiting'
+  if (step.key === 'accepted' && call?.assigned_maqueiro_id) return 'waiting'
+  if (step.key === 'origin' && ['ACEITO', 'A_CAMINHO_ORIGEM'].includes(status)) return 'waiting'
+  if (step.key === 'destination' && status === 'EM_TRANSITO') return 'waiting'
+  if (step.key === 'completed' && status !== 'CONCLUIDO') return 'pending'
+
+  return 'pending'
+}
+
+function buildCallTimeline(call) {
+  const maqueiroName = call?.maqueiro?.full_name || 'Maqueiro não atribuído'
+
+  return [
+    {
+      key: 'created',
+      title: 'Chamado criado',
+      time: call?.created_at,
+      description: `${getCleanPatientCode(call)} • ${call?.origin?.name || '-'} para ${call?.destination?.name || '-'}`
+    },
+    {
+      key: 'assigned',
+      title: 'Maqueiro atribuído',
+      time: call?.assigned_at,
+      description: maqueiroName
+    },
+    {
+      key: 'accepted',
+      title: 'Chamado aceito',
+      time: call?.accepted_at,
+      description: call?.accepted_at ? `${maqueiroName} aceitou o transporte` : 'Aguardando aceite do maqueiro'
+    },
+    {
+      key: 'origin',
+      title: 'Chegada na origem',
+      time: call?.qr_origin_read_at,
+      description: call?.origin?.name || 'QR Code da origem ainda não lido'
+    },
+    {
+      key: 'destination',
+      title: 'Chegada no destino',
+      time: call?.qr_destination_read_at,
+      description: call?.destination?.name || 'QR Code do destino ainda não lido'
+    },
+    {
+      key: 'completed',
+      title: 'Transporte concluído',
+      time: call?.completed_at,
+      description: call?.completed_at ? 'Fluxo finalizado' : 'Aguardando conclusão do transporte'
+    }
+  ].map(step => ({
+    ...step,
+    status: getTimelineStepStatus(step, call)
+  }))
+}
+
+function CallDetailInfo({ label, value, children }) {
+  return (
+    <div className="call-detail-info">
+      <small>{label}</small>
+      {children || <strong>{value || '-'}</strong>}
+    </div>
+  )
+}
+
+function CallTimeline({ call }) {
+  const steps = buildCallTimeline(call)
+
+  return (
+    <div className="call-timeline">
+      {steps.map((step, index) => (
+        <article key={step.key} className={`call-timeline-item ${step.status}`}>
+          <span className="call-timeline-marker">{index + 1}</span>
+          <div>
+            <strong>{step.title}</strong>
+            <p>{step.description}</p>
+          </div>
+          <time>{formatDateTime(step.time)}</time>
+        </article>
+      ))}
+    </div>
+  )
+}
+
+function CallDetailPage({
+  call,
+  maqueiros,
+  selectedMaqueiroByCall,
+  setSelectedMaqueiroByCall,
+  reassignCall,
+  loading,
+  profile,
+  refreshData,
+  onBack
+}) {
+  if (!call) {
+    return (
+      <>
+        <PageHeader
+          title="Detalhes do chamado"
+          subtitle="O chamado selecionado não foi encontrado na lista atual"
+          profile={profile}
+          right={<button type="button" onClick={onBack}>Voltar para chamados</button>}
+        />
+
+        <section className="panel call-detail-empty">
+          <h2>Chamado não encontrado</h2>
+          <p>Ele pode ter sido removido, filtrado ou ainda não foi carregado. Atualize os dados ou volte para a fila de chamados.</p>
+          <div>
+            <button type="button" onClick={refreshData} disabled={loading}>Atualizar dados</button>
+            <button type="button" className="light-button" onClick={onBack}>Voltar</button>
+          </div>
+        </section>
+      </>
+    )
+  }
+
+  const sla = getCallSla(call)
+  const availableMaqueiros = maqueiros.filter(m => (
+    m.status === 'DISPONIVEL' && m.id !== call.assigned_maqueiro_id
+  ))
+
+  return (
+    <>
+      <PageHeader
+        title={`Chamado #${call.number}`}
+        subtitle="Detalhamento completo do transporte, linha do tempo e SLA"
+        profile={profile}
+        right={
+          <div className="call-detail-header-actions">
+            <button type="button" className="light-button" onClick={onBack}>Voltar</button>
+            <button type="button" onClick={refreshData} disabled={loading}>Atualizar</button>
+          </div>
+        }
+      />
+
+      <section className="panel call-detail-hero">
+        <div className="call-detail-hero-main">
+          <div>
+            <span className="section-kicker">Detalhes do transporte</span>
+            <h2>{getCleanPatientCode(call)}</h2>
+            <p>{call.origin?.name || '-'} → {call.destination?.name || '-'}</p>
+          </div>
+
+          <div className="call-detail-status-box">
+            <StatusPill value={call.status} />
+            <SoftPill tone={sla.deadlineTone}>{sla.deadlineStatus}</SoftPill>
+          </div>
+        </div>
+
+        <div className="call-detail-summary">
+          <CallDetailInfo label="Paciente" value={getCleanPatientCode(call)} />
+          <CallDetailInfo label="Leito" value={getCallBed(call)} />
+          <CallDetailInfo label="Maqueiro" value={call.maqueiro?.full_name || 'Não atribuído'} />
+          <CallDetailInfo label="Tempo total" value={formatSeconds(sla.totalSeconds)} />
+        </div>
+      </section>
+
+      <section className="call-detail-layout">
+        <div className="call-detail-main-column">
+          <section className="panel call-detail-panel">
+            <div className="coord-panel-head compact">
+              <div>
+                <span className="section-kicker">Linha do tempo</span>
+                <h2>Histórico do transporte</h2>
+              </div>
+            </div>
+
+            <CallTimeline call={call} />
+          </section>
+
+          <section className="panel call-detail-panel">
+            <div className="coord-panel-head compact">
+              <div>
+                <span className="section-kicker">Informações</span>
+                <h2>Dados operacionais</h2>
+              </div>
+            </div>
+
+            <div className="call-detail-grid">
+              <CallDetailInfo label="Origem" value={call.origin?.name || '-'} />
+              <CallDetailInfo label="Destino" value={call.destination?.name || '-'} />
+              <CallDetailInfo label="Tipo de transporte" value={formatValue(call.transport_type)} />
+              <CallDetailInfo label="Prioridade">
+                <SoftPill tone={priorityClass(call.priority)}>{formatValue(call.priority)}</SoftPill>
+              </CallDetailInfo>
+              <CallDetailInfo label="Risco">
+                <SoftPill tone={riskClass(call.risk)}>{formatValue(call.risk)}</SoftPill>
+              </CallDetailInfo>
+              <CallDetailInfo label="Timeouts" value={call.timeout_count ?? 0} />
+              <CallDetailInfo label="Criado em" value={formatDateTime(call.created_at)} />
+              <CallDetailInfo label="Prazo de aceite" value={formatDateTime(call.accept_deadline_at)} />
+            </div>
+
+            {call.observation && (
+              <div className="call-detail-observation">
+                <small>Observações</small>
+                <p>{call.observation}</p>
+              </div>
+            )}
+          </section>
+        </div>
+
+        <aside className="call-detail-side-column">
+          <section className="panel call-detail-panel">
+            <div className="coord-panel-head compact">
+              <div>
+                <span className="section-kicker">Tempos</span>
+                <h2>SLA do chamado</h2>
+              </div>
+            </div>
+
+            <div className="call-detail-time-grid">
+              <CallDetailInfo label="Tempo até aceitar" value={formatSeconds(sla.acceptSeconds)} />
+              <CallDetailInfo label="Até origem" value={formatSeconds(sla.toOriginSeconds)} />
+              <CallDetailInfo label="Transporte" value={formatSeconds(sla.transportSeconds)} />
+              <CallDetailInfo label="Total" value={formatSeconds(sla.totalSeconds)} />
+            </div>
+          </section>
+
+          <section className="panel call-detail-panel">
+            <div className="coord-panel-head compact">
+              <div>
+                <span className="section-kicker">QR Code</span>
+                <h2>Leituras registradas</h2>
+              </div>
+            </div>
+
+            <div className="call-detail-qr-list">
+              <CallDetailInfo label="QR origem" value={formatDateTime(call.qr_origin_read_at)} />
+              <CallDetailInfo label="QR destino" value={formatDateTime(call.qr_destination_read_at)} />
+              <CallDetailInfo label="Concluído em" value={formatDateTime(call.completed_at)} />
+            </div>
+          </section>
+
+          <section className="panel call-detail-panel">
+            <div className="coord-panel-head compact">
+              <div>
+                <span className="section-kicker">Ação do coordenador</span>
+                <h2>Reatribuição</h2>
+              </div>
+            </div>
+
+            <div className="call-detail-reassign">
+              <select
+                value={selectedMaqueiroByCall[call.id] || ''}
+                onChange={(event) => setSelectedMaqueiroByCall(prev => ({ ...prev, [call.id]: event.target.value }))}
+              >
+                <option value="">{availableMaqueiros.length === 0 ? 'Sem maqueiro disponível' : 'Selecionar maqueiro'}</option>
+                {availableMaqueiros.map(maqueiro => (
+                  <option key={maqueiro.id} value={maqueiro.id}>{getMaqueiroName(maqueiro)}</option>
+                ))}
+              </select>
+
+              <button
+                type="button"
+                onClick={() => reassignCall(call.id)}
+                disabled={loading || availableMaqueiros.length === 0 || !selectedMaqueiroByCall[call.id]}
+              >
+                Reatribuir chamado
+              </button>
+            </div>
+          </section>
+        </aside>
+      </section>
+    </>
+  )
+}
+
+
+function CoordinatorSettingsPage({
+  settings,
+  onSave,
+  auditLog,
+  onClearAudit,
+  sectors,
+  profile
+}) {
+  const [form, setForm] = useState(() => normalizeCoordinatorSettings(settings))
+
+  useEffect(() => {
+    setForm(normalizeCoordinatorSettings(settings))
+  }, [settings])
+
+  function updateField(name, value) {
+    setForm(prev => ({
+      ...prev,
+      [name]: value
+    }))
+  }
+
+  function toggleCriticalSector(sectorId) {
+    const id = String(sectorId)
+
+    setForm(prev => {
+      const current = new Set((prev.criticalSectorIds || []).map(String))
+
+      if (current.has(id)) {
+        current.delete(id)
+      } else {
+        current.add(id)
+      }
+
+      return {
+        ...prev,
+        criticalSectorIds: Array.from(current)
+      }
+    })
+  }
+
+  function submitSettings(event) {
+    event.preventDefault()
+    onSave(normalizeCoordinatorSettings(form))
+  }
+
+  const notificationOptions = [
+    {
+      key: 'notifyNewCalls',
+      title: 'Chamados novos',
+      description: 'Destacar novas solicitações abertas pela enfermagem.'
+    },
+    {
+      key: 'notifyDelayedCalls',
+      title: 'Chamados atrasados',
+      description: 'Mostrar alertas quando o SLA estiver crítico.'
+    },
+    {
+      key: 'notifyUnassignedCalls',
+      title: 'Sem responsável',
+      description: 'Alertar chamados aguardando maqueiro.'
+    }
+  ]
+
+  return (
+    <>
+      <PageHeader
+        title="Configurações do Coordenador"
+        subtitle="Ajuste regras operacionais, alertas e acompanhe a auditoria multiusuário do portal"
+        profile={profile}
+        right={
+          <button type="button" className="light-button" onClick={() => setForm(DEFAULT_COORDINATOR_SETTINGS)}>
+            Restaurar padrão
+          </button>
+        }
+      />
+
+      <section className="coord-settings-layout">
+        <div className="coord-settings-main">
+          <form className="panel coord-settings-panel" onSubmit={submitSettings}>
+            <div className="coord-panel-head compact">
+              <div>
+                <span className="section-kicker">Regras operacionais</span>
+                <h2>Tempos e limites do sistema</h2>
+              </div>
+            </div>
+
+            <div className="coord-settings-grid">
+              <label>
+                <span>Tempo limite para aceite</span>
+                <input
+                  type="number"
+                  min="1"
+                  value={form.acceptDeadlineMinutes}
+                  onChange={(event) => updateField('acceptDeadlineMinutes', event.target.value)}
+                />
+                <small>Minutos para o maqueiro aceitar o chamado.</small>
+              </label>
+
+              <label>
+                <span>Tempo para chegar na origem</span>
+                <input
+                  type="number"
+                  min="1"
+                  value={form.originDeadlineMinutes}
+                  onChange={(event) => updateField('originDeadlineMinutes', event.target.value)}
+                />
+                <small>Referência interna para monitoramento.</small>
+              </label>
+
+              <label>
+                <span>Transporte acima do esperado</span>
+                <input
+                  type="number"
+                  min="1"
+                  value={form.transportLongMinutes}
+                  onChange={(event) => updateField('transportLongMinutes', event.target.value)}
+                />
+                <small>Gera alerta quando o transporte passa desse tempo.</small>
+              </label>
+
+              <label>
+                <span>Maqueiro parado há</span>
+                <input
+                  type="number"
+                  min="1"
+                  value={form.idleAlertMinutes}
+                  onChange={(event) => updateField('idleAlertMinutes', event.target.value)}
+                />
+                <small>Alerta quando disponível por muito tempo.</small>
+              </label>
+
+              <label>
+                <span>Alta demanda por setor</span>
+                <input
+                  type="number"
+                  min="1"
+                  value={form.sectorAlertMinCalls}
+                  onChange={(event) => updateField('sectorAlertMinCalls', event.target.value)}
+                />
+                <small>Quantidade mínima de chamados ativos para alertar.</small>
+              </label>
+
+              <label>
+                <span>Atualização automática</span>
+                <input
+                  type="number"
+                  min="5"
+                  value={form.autoRefreshSeconds}
+                  onChange={(event) => updateField('autoRefreshSeconds', event.target.value)}
+                />
+                <small>Intervalo em segundos para atualizar o painel.</small>
+              </label>
+
+              <label>
+                <span>Prioridade padrão</span>
+                <select
+                  value={form.priorityDefault}
+                  onChange={(event) => updateField('priorityDefault', event.target.value)}
+                >
+                  <option value="BAIXA">Baixa</option>
+                  <option value="NORMAL">Normal</option>
+                  <option value="MEDIA">Média</option>
+                  <option value="ALTA">Alta</option>
+                  <option value="URGENTE">Urgente</option>
+                </select>
+                <small>Referência para novas regras futuras.</small>
+              </label>
+            </div>
+
+            <div className="coord-settings-actions">
+              <button type="submit">Salvar configurações</button>
+            </div>
+          </form>
+
+          <section className="panel coord-settings-panel">
+            <div className="coord-panel-head compact">
+              <div>
+                <span className="section-kicker">Notificações</span>
+                <h2>Alertas dentro do portal</h2>
+              </div>
+            </div>
+
+            <div className="notification-settings-list">
+              {notificationOptions.map(option => (
+                <label key={option.key} className="notification-toggle-card">
+                  <div>
+                    <strong>{option.title}</strong>
+                    <small>{option.description}</small>
+                  </div>
+                  <input
+                    type="checkbox"
+                    checked={Boolean(form[option.key])}
+                    onChange={(event) => updateField(option.key, event.target.checked)}
+                  />
+                </label>
+              ))}
+            </div>
+
+            <div className="coord-settings-actions">
+              <button type="button" onClick={() => onSave(normalizeCoordinatorSettings(form))}>Aplicar alertas</button>
+            </div>
+          </section>
+
+          <section className="panel coord-settings-panel">
+            <div className="coord-panel-head compact">
+              <div>
+                <span className="section-kicker">Setores críticos</span>
+                <h2>Monitoramento prioritário</h2>
+              </div>
+              <span className="count-badge">{form.criticalSectorIds?.length || 0}</span>
+            </div>
+
+            <div className="critical-sector-grid">
+              {sectors.length === 0 && <div className="empty-side">Nenhum setor carregado.</div>}
+
+              {sectors.map(sector => {
+                const checked = (form.criticalSectorIds || []).map(String).includes(String(sector.id))
+
+                return (
+                  <label key={sector.id} className={`critical-sector-card ${checked ? 'active' : ''}`}>
+                    <div>
+                      <strong>{sector.name}</strong>
+                      <small>{sector.active ? 'Ativo' : 'Inativo'} • QR: {sector.qr_token || '-'}</small>
+                    </div>
+                    <input
+                      type="checkbox"
+                      checked={checked}
+                      onChange={() => toggleCriticalSector(sector.id)}
+                    />
+                  </label>
+                )
+              })}
+            </div>
+
+            <div className="coord-settings-actions">
+              <button type="button" onClick={() => onSave(normalizeCoordinatorSettings(form))}>
+                Salvar setores críticos
+              </button>
+            </div>
+          </section>
+        </div>
+
+        <aside className="coord-settings-side">
+          <section className="panel coord-audit-panel">
+            <div className="coord-panel-head compact">
+              <div>
+                <span className="section-kicker">Auditoria</span>
+                <h2>Registro de ações</h2>
+              </div>
+              <span className="count-badge">{auditLog.length}</span>
+            </div>
+
+            <p className="audit-helper">
+              Auditoria centralizada no Supabase. Todos os coordenadores e administradores autorizados podem acompanhar as ações registradas.
+            </p>
+
+            <div className="audit-list">
+              {auditLog.length === 0 && <div className="empty-side">Nenhuma ação registrada ainda.</div>}
+
+              {auditLog.slice(0, 14).map(entry => (
+                <article key={entry.id} className="audit-item">
+                  <span>{entry.type}</span>
+                  <div>
+                    <strong>{entry.description}</strong>
+                    <small>{entry.user} • {formatDateTime(entry.created_at)}</small>
+                  </div>
+                </article>
+              ))}
+            </div>
+
+            <button type="button" className="light-button audit-clear-button" onClick={onClearAudit}>
+              Atualizar auditoria
+            </button>
+          </section>
+        </aside>
+      </section>
+    </>
+  )
+}
+
 function OverviewPage(props) {
-  const { dashboardStats, counters, maqueiros, calls, sectors, onNavigate, profile, loading, refreshData, selectedMaqueiroByCall, setSelectedMaqueiroByCall, reassignCall } = props
+  const { dashboardStats, counters, maqueiros, calls, sectors, coordinatorSettings, registerAudit, onNavigate, openCallDetails, profile, loading, refreshData, selectedMaqueiroByCall, setSelectedMaqueiroByCall, reassignCall } = props
   const [operationMonth, setOperationMonth] = useState(getCurrentMonthValue())
   const operationMonthLabel = getMonthLabel(operationMonth)
 
   const monthlyCalls = useMemo(() => calls.filter(call => isSameMonth(getCallReferenceDate(call), operationMonth)), [calls, operationMonth])
   const visibleCalls = calls.slice(0, 6)
   const unassignedCalls = calls.filter(isCallUnassigned)
-  const intelligentAlerts = buildCoordinatorAlerts(calls, maqueiros, sectors)
+  const intelligentAlerts = buildCoordinatorAlerts(calls, maqueiros, sectors, coordinatorSettings)
   const visibleTeam = maqueiros.slice(0, 5)
   const slaSummary = buildSlaSummary(calls)
   const monthlySlaSummary = buildSlaSummary(monthlyCalls)
@@ -1291,6 +1940,7 @@ function OverviewPage(props) {
       }
 
       doc.save(`relatorio-operacao-${sanitizeFileName(operationMonthLabel)}.pdf`)
+      registerAudit?.('RELATORIO', `Gerou relatório mensal da operação - ${operationMonthLabel}`, { period: operationMonth })
     } catch (error) {
       console.error('Erro ao gerar relatório geral:', error)
       alert('Não foi possível gerar o relatório geral em PDF. Verifique se o jsPDF está instalado.')
@@ -1387,6 +2037,7 @@ function OverviewPage(props) {
               reassignCall={reassignCall}
               loading={loading}
               compact
+              onOpenDetails={openCallDetails}
             />
 
             <div className="table-footer">
@@ -1442,7 +2093,8 @@ function CallsPage({
   reassignCall,
   loading,
   profile,
-  refreshData
+  refreshData,
+  openCallDetails
 }) {
   const [searchTerm, setSearchTerm] = useState('')
   const [priorityFilter, setPriorityFilter] = useState('TODOS')
@@ -1584,6 +2236,7 @@ function CallsPage({
           setSelectedMaqueiroByCall={setSelectedMaqueiroByCall}
           reassignCall={reassignCall}
           loading={loading}
+          onOpenDetails={openCallDetails}
         />
       </section>
     </>
@@ -1852,7 +2505,7 @@ function MaqueiroProgressCard({ progress, onOpenHistory }) {
 }
 
 
-function MaqueirosPage({ maqueiros, calls, profile, refreshData, loading }) {
+function MaqueirosPage({ maqueiros, calls, profile, refreshData, loading, registerAudit }) {
   const [selectedMonth, setSelectedMonth] = useState(getCurrentMonthValue())
   const [historyMaqueiroId, setHistoryMaqueiroId] = useState(null)
   const selectedMonthLabel = getMonthLabel(selectedMonth)
@@ -2035,6 +2688,7 @@ function MaqueirosPage({ maqueiros, calls, profile, refreshData, loading }) {
       }
 
       doc.save(`relatorio-maqueiros-${sanitizeFileName(selectedMonthLabel)}.pdf`)
+      registerAudit?.('RELATORIO', `Gerou relatório de maqueiros - ${selectedMonthLabel}`, { period: selectedMonth })
     } catch (error) {
       console.error('Erro ao gerar PDF:', error)
       alert('Não foi possível gerar o PDF. Verifique se a biblioteca jsPDF foi instalada com: npm install jspdf')
@@ -2760,6 +3414,7 @@ function App() {
   const [session, setSession] = useState(null)
   const [profile, setProfile] = useState(null)
   const [activePage, setActivePage] = useState('overview')
+  const [selectedCallId, setSelectedCallId] = useState(null)
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
   const [panelTheme, setPanelTheme] = useState('light')
   const [checking, setChecking] = useState(true)
@@ -2774,6 +3429,8 @@ function App() {
   const [success, setSuccess] = useState('')
   const [statusFilter, setStatusFilter] = useState('TODOS')
   const [selectedMaqueiroByCall, setSelectedMaqueiroByCall] = useState({})
+  const [coordinatorSettings, setCoordinatorSettings] = useState(() => normalizeCoordinatorSettings(readStoredJson(COORD_SETTINGS_STORAGE_KEY, DEFAULT_COORDINATOR_SETTINGS)))
+  const [auditLog, setAuditLog] = useState(() => readStoredJson(COORD_AUDIT_STORAGE_KEY, []))
 
   useEffect(() => {
     bootstrap()
@@ -2829,10 +3486,17 @@ function App() {
 
     const { data: userData } = await supabase.auth.getUser()
 
-    setProfile({
+    const normalizedProfile = {
       ...profileData,
       email: profileData.email || userData?.user?.email || ''
-    })
+    }
+
+    setProfile(normalizedProfile)
+
+    await Promise.all([
+      loadCoordinatorSettingsFromSupabase(),
+      loadAuditLogFromSupabase()
+    ])
 
     await refreshData()
   }
@@ -2928,6 +3592,69 @@ function App() {
     setSectors(data || [])
   }
 
+  async function loadCoordinatorSettingsFromSupabase() {
+    try {
+      const { data, error: settingsError } = await supabase
+        .from('coordinator_settings')
+        .select('settings')
+        .eq('scope', 'global')
+        .maybeSingle()
+
+      if (settingsError) {
+        console.warn('Configurações do coordenador ainda não estão no Supabase:', settingsError.message)
+        return
+      }
+
+      const cleanSettings = normalizeCoordinatorSettings(data?.settings || DEFAULT_COORDINATOR_SETTINGS)
+
+      setCoordinatorSettings(cleanSettings)
+      writeStoredJson(COORD_SETTINGS_STORAGE_KEY, cleanSettings)
+
+      if (!data) {
+        await supabase
+          .from('coordinator_settings')
+          .upsert({
+            scope: 'global',
+            settings: cleanSettings,
+            updated_by: session?.user?.id || null
+          }, { onConflict: 'scope' })
+      }
+    } catch (settingsError) {
+      console.warn('Falha ao carregar configurações do Supabase:', settingsError)
+    }
+  }
+
+  async function loadAuditLogFromSupabase() {
+    try {
+      const { data, error: auditError } = await supabase
+        .from('coordinator_audit_logs')
+        .select('id, action_type, description, user_id, user_name, user_email, metadata, created_at')
+        .order('created_at', { ascending: false })
+        .limit(100)
+
+      if (auditError) {
+        console.warn('Auditoria multiusuário ainda não está no Supabase:', auditError.message)
+        return
+      }
+
+      const formattedEntries = (data || []).map(entry => ({
+        id: entry.id,
+        type: entry.action_type,
+        description: entry.description,
+        user_id: entry.user_id,
+        user: entry.user_name || entry.user_email || 'Coordenador',
+        user_email: entry.user_email || '',
+        created_at: entry.created_at,
+        metadata: entry.metadata || {}
+      }))
+
+      setAuditLog(formattedEntries)
+      writeStoredJson(COORD_AUDIT_STORAGE_KEY, formattedEntries)
+    } catch (auditError) {
+      console.warn('Falha ao carregar auditoria do Supabase:', auditError)
+    }
+  }
+
   useEffect(() => {
     if (profile) loadCalls()
   }, [statusFilter])
@@ -2978,7 +3705,33 @@ function App() {
       )
       .subscribe()
 
-    const interval = window.setInterval(refresh, 10000)
+    const settingsChannel = supabase
+      .channel('coordinator-settings-sync')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'coordinator_settings'
+        },
+        loadCoordinatorSettingsFromSupabase
+      )
+      .subscribe()
+
+    const auditChannel = supabase
+      .channel('coordinator-audit-sync')
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'coordinator_audit_logs'
+        },
+        loadAuditLogFromSupabase
+      )
+      .subscribe()
+
+    const interval = window.setInterval(refresh, Math.max(5, Number(coordinatorSettings.autoRefreshSeconds) || 10) * 1000)
 
     const handleFocus = () => refresh()
 
@@ -2998,13 +3751,84 @@ function App() {
       supabase.removeChannel(callsChannel)
       supabase.removeChannel(maqueiroStatusChannel)
       supabase.removeChannel(sectorsChannel)
+      supabase.removeChannel(settingsChannel)
+      supabase.removeChannel(auditChannel)
     }
-  }, [profile, statusFilter])
+  }, [profile, statusFilter, coordinatorSettings.autoRefreshSeconds])
 
   async function logout() {
     await supabase.auth.signOut()
     setSession(null)
     setProfile(null)
+  }
+
+  async function registerAudit(type, description, metadata = {}) {
+    const entry = buildAuditEntry(type, description, profile, metadata)
+
+    setAuditLog(prev => {
+      const next = [entry, ...(Array.isArray(prev) ? prev : [])].slice(0, 100)
+      writeStoredJson(COORD_AUDIT_STORAGE_KEY, next)
+      return next
+    })
+
+    try {
+      const { error: auditError } = await supabase
+        .from('coordinator_audit_logs')
+        .insert({
+          action_type: type,
+          description,
+          user_id: profile?.id || session?.user?.id || null,
+          user_name: profile?.full_name || profile?.name || profile?.email || 'Coordenador',
+          user_email: profile?.email || '',
+          metadata: metadata || {}
+        })
+
+      if (auditError) {
+        console.warn('Não foi possível salvar auditoria no Supabase:', auditError.message)
+        return
+      }
+
+      await loadAuditLogFromSupabase()
+    } catch (auditError) {
+      console.warn('Falha ao registrar auditoria no Supabase:', auditError)
+    }
+  }
+
+  async function saveCoordinatorSettings(nextSettings) {
+    const cleanSettings = normalizeCoordinatorSettings(nextSettings)
+
+    setCoordinatorSettings(cleanSettings)
+    writeStoredJson(COORD_SETTINGS_STORAGE_KEY, cleanSettings)
+
+    try {
+      const { error: settingsError } = await supabase
+        .from('coordinator_settings')
+        .upsert({
+          scope: 'global',
+          settings: cleanSettings,
+          updated_by: profile?.id || session?.user?.id || null
+        }, { onConflict: 'scope' })
+
+      if (settingsError) {
+        setError(`Não foi possível salvar no Supabase: ${settingsError.message}`)
+        setSuccess('Configurações salvas apenas neste navegador. Rode o SQL de multiusuário no Supabase.')
+        window.setTimeout(() => setSuccess(''), 3800)
+        return
+      }
+
+      await registerAudit('CONFIGURAÇÃO', 'Atualizou configurações globais do portal do coordenador', cleanSettings)
+      setSuccess('Configurações globais salvas no Supabase.')
+      window.setTimeout(() => setSuccess(''), 2800)
+    } catch (settingsError) {
+      console.warn('Falha ao salvar configurações no Supabase:', settingsError)
+      setError('Não foi possível salvar as configurações globais no Supabase.')
+    }
+  }
+
+  async function clearAuditLog() {
+    await loadAuditLogFromSupabase()
+    setSuccess('Auditoria multiusuário atualizada.')
+    window.setTimeout(() => setSuccess(''), 2200)
   }
 
   async function reassignCall(callId) {
@@ -3029,11 +3853,22 @@ function App() {
       return
     }
 
+    const call = calls.find(item => item.id === callId)
+    const maqueiro = maqueiros.find(item => item.id === maqueiroId)
+    registerAudit('REATRIBUIÇÃO', `Reatribuiu chamado #${call?.number || callId} para ${getMaqueiroName(maqueiro)}`, { callId, maqueiroId })
+
     await refreshData()
     setLoading(false)
   }
 
+  function openCallDetails(callId) {
+    setSelectedCallId(callId)
+    setActivePage('call-detail')
+    window.setTimeout(() => window.scrollTo({ top: 0, behavior: 'smooth' }), 40)
+  }
+
   function printQrCodes() {
+    registerAudit('IMPRESSÃO', 'Abriu impressão de QR Codes dos setores', { totalSectors: sectors.length })
     window.print()
   }
 
@@ -3099,6 +3934,7 @@ function App() {
     }
 
     setSuccess(sectorForm.id ? 'Setor atualizado com sucesso.' : 'Setor criado com sucesso.')
+    registerAudit('SETOR', sectorForm.id ? `Atualizou setor ${cleanName}` : `Criou setor ${cleanName}`, { sectorId: sectorForm.id, name: cleanName })
     setSectorForm(EMPTY_SECTOR_FORM)
     await refreshData()
     setSectorSaving(false)
@@ -3124,6 +3960,7 @@ function App() {
     }
 
     setSuccess(!sector.active ? 'Setor ativado.' : 'Setor inativado.')
+    registerAudit('SETOR', !sector.active ? `Ativou setor ${sector.name}` : `Inativou setor ${sector.name}`, { sectorId: sector.id })
     await refreshData()
     setSectorSaving(false)
   }
@@ -3147,9 +3984,14 @@ function App() {
     }
 
     setSuccess('QR token regenerado. Reimprima o QR do setor.')
+    registerAudit('QR CODE', `Regenerou QR Code do setor ${sector.name}`, { sectorId: sector.id })
     await refreshData()
     setSectorSaving(false)
   }
+
+  const selectedCall = useMemo(() => {
+    return calls.find(call => call.id === selectedCallId) || null
+  }, [calls, selectedCallId])
 
   const counters = useMemo(() => ({
     aguardando: dashboardStats?.waiting_calls ?? calls.filter(c => c.status === 'AGUARDANDO_MAQUEIRO').length,
@@ -3260,7 +4102,10 @@ function App() {
               maqueiros={maqueiros}
               calls={calls}
               sectors={sectors}
+              coordinatorSettings={coordinatorSettings}
+              registerAudit={registerAudit}
               onNavigate={setActivePage}
+              openCallDetails={openCallDetails}
               profile={profile}
               loading={loading}
               refreshData={refreshData}
@@ -3283,6 +4128,21 @@ function App() {
               loading={loading}
               profile={profile}
               refreshData={refreshData}
+              openCallDetails={openCallDetails}
+            />
+          )}
+
+          {activePage === 'call-detail' && (
+            <CallDetailPage
+              call={selectedCall}
+              maqueiros={maqueiros}
+              selectedMaqueiroByCall={selectedMaqueiroByCall}
+              setSelectedMaqueiroByCall={setSelectedMaqueiroByCall}
+              reassignCall={reassignCall}
+              loading={loading}
+              profile={profile}
+              refreshData={refreshData}
+              onBack={() => setActivePage('calls')}
             />
           )}
 
@@ -3302,6 +4162,7 @@ function App() {
               profile={profile}
               refreshData={refreshData}
               loading={loading}
+              registerAudit={registerAudit}
             />
           )}
 
@@ -3333,6 +4194,17 @@ function App() {
 
           {activePage === 'qrcodes' && (
             <QrCodesPage sectors={sectors} printQrCodes={printQrCodes} profile={profile} />
+          )}
+
+          {activePage === 'settings' && (
+            <CoordinatorSettingsPage
+              settings={coordinatorSettings}
+              onSave={saveCoordinatorSettings}
+              auditLog={auditLog}
+              onClearAudit={clearAuditLog}
+              sectors={sectors}
+              profile={profile}
+            />
           )}
 
           {activePage === 'profile' && (
