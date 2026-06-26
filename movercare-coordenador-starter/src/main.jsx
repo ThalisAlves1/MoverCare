@@ -846,12 +846,456 @@ function CallRows({ calls, maqueiros, selectedMaqueiroByCall, setSelectedMaqueir
   )
 }
 
+
+function isCallUnassigned(call) {
+  const hasMaqueiro = Boolean(call.assigned_maqueiro_id || call.maqueiro?.id)
+  return !hasMaqueiro && ['ABERTO', 'AGUARDANDO_MAQUEIRO', 'ENVIADO', 'ATRASADO'].includes(call.status)
+}
+
+function getCallAgeMinutes(call) {
+  const reference = call.created_at || call.assigned_at
+  if (!reference) return null
+
+  const start = new Date(reference)
+  if (Number.isNaN(start.getTime())) return null
+
+  return Math.max(0, Math.round((Date.now() - start.getTime()) / 60000))
+}
+
+function buildCoordinatorAlerts(calls, maqueiros, sectors) {
+  const alerts = []
+
+  calls.forEach(call => {
+    const sla = getCallSla(call)
+    const age = getCallAgeMinutes(call)
+
+    if (call.status === 'ATRASADO' || sla.deadlineTone === 'danger-soft') {
+      alerts.push({
+        id: `sla-${call.id}`,
+        tone: 'danger',
+        title: `Chamado #${call.number} com SLA crítico`,
+        description: `${call.origin?.name || '-'} → ${call.destination?.name || '-'}`,
+        meta: formatValue(call.status),
+        call
+      })
+    } else if (isCallUnassigned(call)) {
+      alerts.push({
+        id: `sem-responsavel-${call.id}`,
+        tone: 'warn',
+        title: `Chamado #${call.number} sem responsável`,
+        description: `${call.origin?.name || '-'} → ${call.destination?.name || '-'}`,
+        meta: age !== null ? `${age} min aguardando` : 'Aguardando atribuição',
+        call
+      })
+    } else if (ACTIVE_STATUSES.includes(call.status) && getCallSla(call).totalSeconds > 45 * 60) {
+      alerts.push({
+        id: `longo-${call.id}`,
+        tone: 'warn',
+        title: `Transporte #${call.number} acima do tempo esperado`,
+        description: `${call.maqueiro?.full_name || 'Maqueiro não informado'} • ${formatSeconds(getCallSla(call).totalSeconds)}`,
+        meta: formatValue(call.status),
+        call
+      })
+    }
+  })
+
+  maqueiros.forEach(maqueiro => {
+    const lastUpdate = maqueiro.updated_at ? new Date(maqueiro.updated_at) : null
+    const minutesIdle = lastUpdate && !Number.isNaN(lastUpdate.getTime())
+      ? Math.round((Date.now() - lastUpdate.getTime()) / 60000)
+      : null
+
+    if (maqueiro.status === 'DISPONIVEL' && minutesIdle !== null && minutesIdle >= 90) {
+      alerts.push({
+        id: `idle-${maqueiro.id}`,
+        tone: 'info',
+        title: `${getMaqueiroName(maqueiro)} disponível há muito tempo`,
+        description: maqueiro.current_sector_name || getSectorNameFromMaqueiro(maqueiro) || 'Setor não informado',
+        meta: `${minutesIdle} min parado`
+      })
+    }
+  })
+
+  buildSectorDemand(calls.filter(call => ACTIVE_STATUSES.includes(call.status)), sectors)
+    .filter(item => item.total >= 3)
+    .slice(0, 2)
+    .forEach(item => {
+      alerts.push({
+        id: `setor-${item.sector.id}`,
+        tone: item.delayed > 0 ? 'danger' : 'warn',
+        title: `${item.sector.name} com alta demanda`,
+        description: `${item.total} chamado${item.total === 1 ? '' : 's'} ativo${item.total === 1 ? '' : 's'} no setor`,
+        meta: item.delayed > 0 ? `${item.delayed} atraso${item.delayed === 1 ? '' : 's'}` : 'Monitorar fila'
+      })
+    })
+
+  const toneOrder = { danger: 0, warn: 1, info: 2, ok: 3 }
+  return alerts.sort((a, b) => (toneOrder[a.tone] ?? 9) - (toneOrder[b.tone] ?? 9))
+}
+
+function buildSectorDemand(calls, sectors) {
+  return sectors.map(sector => {
+    const sectorCalls = calls.filter(call => callTouchesSector(call, sector))
+    const delayed = sectorCalls.filter(call => call.status === 'ATRASADO' || getCallSla(call).deadlineTone === 'danger-soft')
+    const waiting = sectorCalls.filter(call => ['ABERTO', 'AGUARDANDO_MAQUEIRO', 'ENVIADO'].includes(call.status))
+    const finished = sectorCalls.filter(call => call.status === 'CONCLUIDO' || call.completed_at)
+
+    return {
+      sector,
+      total: sectorCalls.length,
+      delayed: delayed.length,
+      waiting: waiting.length,
+      finished: finished.length
+    }
+  }).sort((a, b) => b.total - a.total || b.delayed - a.delayed || a.sector.name.localeCompare(b.sector.name))
+}
+
+function buildHourlyPeaks(calls) {
+  const buckets = Array.from({ length: 24 }, (_, hour) => ({
+    hour,
+    label: `${String(hour).padStart(2, '0')}:00 às ${String(hour).padStart(2, '0')}:59`,
+    total: 0
+  }))
+
+  calls.forEach(call => {
+    const reference = getCallReferenceDate(call) || call.created_at
+    if (!reference) return
+
+    const date = new Date(reference)
+    if (Number.isNaN(date.getTime())) return
+
+    buckets[date.getHours()].total += 1
+  })
+
+  return buckets.filter(item => item.total > 0).sort((a, b) => b.total - a.total || a.hour - b.hour)
+}
+
+function CoordinatorAlertPanel({ alerts, onNavigate }) {
+  return (
+    <section className="panel coord-alert-panel">
+      <div className="coord-panel-head compact">
+        <div>
+          <span className="section-kicker">Inteligência operacional</span>
+          <h2>Alertas do coordenador</h2>
+        </div>
+        <span className="count-badge">{alerts.length}</span>
+      </div>
+
+      <div className="coord-alert-list">
+        {alerts.length === 0 && <div className="empty-side">Nenhum alerta importante agora.</div>}
+        {alerts.slice(0, 6).map(alert => (
+          <article key={alert.id} className={`coord-alert-item ${alert.tone}`}>
+            <span className="coord-alert-dot" />
+            <div>
+              <strong>{alert.title}</strong>
+              <p>{alert.description}</p>
+            </div>
+            <small>{alert.meta}</small>
+          </article>
+        ))}
+      </div>
+
+      <button className="full-link" onClick={() => onNavigate('calls')}>Abrir fila de chamados</button>
+    </section>
+  )
+}
+
+function UnassignedCallsPanel({ calls, maqueiros, selectedMaqueiroByCall, setSelectedMaqueiroByCall, reassignCall, loading, onNavigate }) {
+  const availableMaqueiros = maqueiros.filter(m => m.status === 'DISPONIVEL')
+
+  return (
+    <section className="panel coord-unassigned-panel">
+      <div className="coord-panel-head compact">
+        <div>
+          <span className="section-kicker">Ação rápida</span>
+          <h2>Chamados sem responsável</h2>
+        </div>
+        <span className="count-badge">{calls.length}</span>
+      </div>
+
+      <div className="unassigned-list">
+        {calls.length === 0 && <div className="empty-side">Nenhum chamado aguardando atribuição.</div>}
+        {calls.slice(0, 4).map(call => (
+          <article key={call.id} className="unassigned-item">
+            <div>
+              <strong>#{call.number}</strong>
+              <small>{call.origin?.name || '-'} → {call.destination?.name || '-'}</small>
+            </div>
+
+            <div className="unassigned-actions">
+              <select
+                value={selectedMaqueiroByCall[call.id] || ''}
+                onChange={(event) => setSelectedMaqueiroByCall(prev => ({ ...prev, [call.id]: event.target.value }))}
+              >
+                <option value="">{availableMaqueiros.length === 0 ? 'Sem maqueiro disponível' : 'Selecionar'}</option>
+                {availableMaqueiros.map(maqueiro => (
+                  <option key={maqueiro.id} value={maqueiro.id}>{getMaqueiroName(maqueiro)}</option>
+                ))}
+              </select>
+
+              <button onClick={() => reassignCall(call.id)} disabled={loading || availableMaqueiros.length === 0 || !selectedMaqueiroByCall[call.id]}>
+                Atribuir
+              </button>
+            </div>
+          </article>
+        ))}
+      </div>
+
+      <button className="full-link" onClick={() => onNavigate('calls')}>Ver todos</button>
+    </section>
+  )
+}
+
+function SectorDemandPanel({ items }) {
+  const maxTotal = Math.max(1, ...items.map(item => item.total))
+
+  return (
+    <section className="panel coord-demand-panel">
+      <div className="coord-panel-head compact">
+        <div>
+          <span className="section-kicker">Demanda</span>
+          <h2>Setores mais acionados</h2>
+        </div>
+      </div>
+
+      <div className="sector-demand-list">
+        {items.length === 0 && <div className="empty-side">Nenhum chamado no período.</div>}
+        {items.slice(0, 6).map(item => (
+          <article key={item.sector.id} className="sector-demand-item">
+            <div>
+              <strong>{item.sector.name}</strong>
+              <small>{item.total} chamado{item.total === 1 ? '' : 's'} • {item.waiting} aguardando • {item.delayed} atraso{item.delayed === 1 ? '' : 's'}</small>
+            </div>
+            <span>{item.total}</span>
+            <em><i style={{ width: `${Math.max(8, Math.round((item.total / maxTotal) * 100))}%` }} /></em>
+          </article>
+        ))}
+      </div>
+    </section>
+  )
+}
+
+function TeamHighlightsPanel({ ranking }) {
+  return (
+    <section className="panel coord-ranking-panel">
+      <div className="coord-panel-head compact">
+        <div>
+          <span className="section-kicker">Equipe</span>
+          <h2>Destaques da equipe</h2>
+        </div>
+      </div>
+
+      <div className="team-ranking-list">
+        {ranking.length === 0 && <div className="empty-side">Nenhum transporte no período.</div>}
+        {ranking.slice(0, 5).map((item, index) => (
+          <article key={item.maqueiro.id} className="team-ranking-item">
+            <span className="ranking-position">{index + 1}</span>
+            <div>
+              <strong>{getMaqueiroName(item.maqueiro)}</strong>
+              <small>{item.completed} concluído{item.completed === 1 ? '' : 's'} • {item.onTimePercent}% no prazo</small>
+            </div>
+            <b>{item.total}</b>
+          </article>
+        ))}
+      </div>
+    </section>
+  )
+}
+
+function PeakHoursPanel({ peaks }) {
+  const maxTotal = Math.max(1, ...peaks.map(item => item.total))
+
+  return (
+    <section className="panel side-panel coord-peak-panel">
+      <h3>Horários de pico <span>{peaks.length}</span></h3>
+      <div className="peak-hour-list">
+        {peaks.length === 0 && <div className="empty-side">Sem dados no período.</div>}
+        {peaks.slice(0, 5).map(item => (
+          <article key={item.hour} className="peak-hour-item">
+            <div>
+              <strong>{item.label}</strong>
+              <small>{item.total} chamado{item.total === 1 ? '' : 's'}</small>
+            </div>
+            <em><i style={{ width: `${Math.max(8, Math.round((item.total / maxTotal) * 100))}%` }} /></em>
+          </article>
+        ))}
+      </div>
+    </section>
+  )
+}
+
 function OverviewPage(props) {
   const { dashboardStats, counters, maqueiros, calls, sectors, onNavigate, profile, loading, refreshData, selectedMaqueiroByCall, setSelectedMaqueiroByCall, reassignCall } = props
-  const visibleCalls = calls.slice(0, 8)
-  const alerts = calls.filter(c => ['ATRASADO', 'AGUARDANDO_MAQUEIRO', 'ENVIADO'].includes(c.status)).slice(0, 3)
+  const [operationMonth, setOperationMonth] = useState(getCurrentMonthValue())
+  const operationMonthLabel = getMonthLabel(operationMonth)
+
+  const monthlyCalls = useMemo(() => calls.filter(call => isSameMonth(getCallReferenceDate(call), operationMonth)), [calls, operationMonth])
+  const visibleCalls = calls.slice(0, 6)
+  const unassignedCalls = calls.filter(isCallUnassigned)
+  const intelligentAlerts = buildCoordinatorAlerts(calls, maqueiros, sectors)
   const visibleTeam = maqueiros.slice(0, 5)
   const slaSummary = buildSlaSummary(calls)
+  const monthlySlaSummary = buildSlaSummary(monthlyCalls)
+  const sectorDemand = buildSectorDemand(monthlyCalls, sectors).filter(item => item.total > 0)
+  const peakHours = buildHourlyPeaks(monthlyCalls)
+  const teamRanking = maqueiros
+    .map(maqueiro => buildMaqueiroMonthlyProgress(maqueiro, calls, operationMonth))
+    .filter(item => item.total > 0)
+    .sort((a, b) => b.completed - a.completed || b.total - a.total || a.delayedCount - b.delayedCount)
+
+  function handleOperationReportPdf() {
+    try {
+      const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' })
+      const pageWidth = doc.internal.pageSize.getWidth()
+      const pageHeight = doc.internal.pageSize.getHeight()
+      const generatedAt = getPdfDateTime()
+      let y = 40
+
+      doc.setFillColor(6, 43, 88)
+      doc.rect(0, 0, pageWidth, 30, 'F')
+      doc.setTextColor(255, 255, 255)
+      doc.setFont('helvetica', 'bold')
+      doc.setFontSize(18)
+      doc.text('Relatório mensal da operação', 14, 13)
+      doc.setFont('helvetica', 'normal')
+      doc.setFontSize(10)
+      doc.text(`Período: ${operationMonthLabel}`, 14, 22)
+      doc.text(`Gerado em: ${generatedAt}`, pageWidth - 14, 22, { align: 'right' })
+
+      const summaryCards = [
+        ['Chamados', monthlyCalls.length],
+        ['Concluídos', monthlySlaSummary.finished],
+        ['Atrasos', monthlySlaSummary.delayed],
+        ['SLA no prazo', `${monthlySlaSummary.onTimePercent}%`],
+        ['Tempo médio', formatSeconds(monthlySlaSummary.avgTransportSeconds)]
+      ]
+      const gap = 4
+      const cardWidth = (pageWidth - 28 - gap * (summaryCards.length - 1)) / summaryCards.length
+
+      summaryCards.forEach(([label, value], index) => {
+        const x = 14 + index * (cardWidth + gap)
+        doc.setFillColor(245, 250, 252)
+        doc.roundedRect(x, y, cardWidth, 22, 3, 3, 'F')
+        doc.setDrawColor(220, 232, 239)
+        doc.roundedRect(x, y, cardWidth, 22, 3, 3, 'S')
+        doc.setTextColor(100, 116, 139)
+        doc.setFont('helvetica', 'bold')
+        doc.setFontSize(7)
+        doc.text(String(label).toUpperCase(), x + 3, y + 7)
+        doc.setTextColor(6, 43, 88)
+        doc.setFontSize(13)
+        doc.text(safePdfText(value), x + 3, y + 16)
+      })
+
+      y += 34
+
+      function drawSectionTable(title, columns, rows) {
+        doc.setTextColor(6, 43, 88)
+        doc.setFont('helvetica', 'bold')
+        doc.setFontSize(12)
+        doc.text(title, 14, y)
+        y += 6
+
+        const headerHeight = 9
+        const rowHeight = 10
+        if (y + headerHeight + rowHeight > pageHeight - 14) {
+          doc.addPage()
+          y = 22
+        }
+
+        let x = 14
+        columns.forEach(col => {
+          drawPdfCell(doc, col.label, x, y, col.width, headerHeight, {
+            fill: [6, 43, 88],
+            textColor: [255, 255, 255],
+            fontStyle: 'bold',
+            fontSize: 7,
+            align: col.align || 'left'
+          })
+          x += col.width
+        })
+        y += headerHeight
+
+        if (rows.length === 0) {
+          doc.setTextColor(100, 116, 139)
+          doc.setFont('helvetica', 'normal')
+          doc.setFontSize(9)
+          doc.text('Nenhum dado encontrado.', 16, y + 7)
+          y += 13
+          return
+        }
+
+        rows.forEach((row, index) => {
+          if (y + rowHeight > pageHeight - 14) {
+            doc.addPage()
+            y = 22
+          }
+          let cellX = 14
+          columns.forEach(col => {
+            drawPdfCell(doc, row[col.key], cellX, y, col.width, rowHeight, {
+              fill: index % 2 === 0 ? [255, 255, 255] : [245, 250, 252],
+              fontSize: 7,
+              align: col.align || 'left'
+            })
+            cellX += col.width
+          })
+          y += rowHeight
+        })
+
+        y += 10
+      }
+
+      drawSectionTable('Setores com mais demanda', [
+        { label: 'Setor', key: 'setor', width: 72 },
+        { label: 'Chamados', key: 'total', width: 28, align: 'center' },
+        { label: 'Aguardando', key: 'waiting', width: 32, align: 'center' },
+        { label: 'Atrasos', key: 'delayed', width: 28, align: 'center' },
+        { label: 'Concluídos', key: 'finished', width: 32, align: 'center' }
+      ], sectorDemand.slice(0, 8).map(item => ({
+        setor: item.sector.name,
+        total: item.total,
+        waiting: item.waiting,
+        delayed: item.delayed,
+        finished: item.finished
+      })))
+
+      drawSectionTable('Destaques da equipe', [
+        { label: 'Maqueiro', key: 'maqueiro', width: 58 },
+        { label: 'Transportes', key: 'total', width: 28, align: 'center' },
+        { label: 'Concluídos', key: 'completed', width: 28, align: 'center' },
+        { label: 'Atrasos', key: 'delayed', width: 24, align: 'center' },
+        { label: 'SLA', key: 'sla', width: 22, align: 'center' },
+        { label: 'Tempo médio', key: 'avg', width: 32 }
+      ], teamRanking.slice(0, 10).map(item => ({
+        maqueiro: getMaqueiroName(item.maqueiro),
+        total: item.total,
+        completed: item.completed,
+        delayed: item.delayedCount,
+        sla: item.completed ? `${item.onTimePercent}%` : '-',
+        avg: formatSeconds(item.avgTransportSeconds)
+      })))
+
+      drawSectionTable('Horários de pico', [
+        { label: 'Faixa horária', key: 'label', width: 70 },
+        { label: 'Chamados', key: 'total', width: 28, align: 'center' }
+      ], peakHours.slice(0, 8))
+
+      const totalPages = doc.internal.getNumberOfPages()
+      for (let page = 1; page <= totalPages; page += 1) {
+        doc.setPage(page)
+        doc.setFont('helvetica', 'normal')
+        doc.setFontSize(8)
+        doc.setTextColor(100, 116, 139)
+        doc.text('MoverCare - Portal do Coordenador', 14, pageHeight - 8)
+        doc.text(`Página ${page} de ${totalPages}`, pageWidth - 14, pageHeight - 8, { align: 'right' })
+      }
+
+      doc.save(`relatorio-operacao-${sanitizeFileName(operationMonthLabel)}.pdf`)
+    } catch (error) {
+      console.error('Erro ao gerar relatório geral:', error)
+      alert('Não foi possível gerar o relatório geral em PDF. Verifique se o jsPDF está instalado.')
+    }
+  }
 
   return (
     <>
@@ -869,19 +1313,60 @@ function OverviewPage(props) {
       />
 
       <section className="metrics-row">
-        <MetricCard label="Chamados abertos" value={dashboardStats?.calls_today ?? 0} sub="+12% vs ontem" tone="teal" />
-        <MetricCard label="Aguardando aceite" value={counters.aguardando} sub="+3% vs ontem" tone="blue" />
-        <MetricCard label="Em andamento" value={dashboardStats?.active_calls ?? 0} sub="+8% vs ontem" tone="teal" />
-        <MetricCard label="Atrasados" value={dashboardStats?.delayed_calls ?? 0} sub="-2 vs ontem" tone="red" />
-        <MetricCard label="Maqueiros disponíveis" value={counters.disponiveis} sub="do total" tone="teal" />
+        <MetricCard label="Chamados abertos" value={dashboardStats?.calls_today ?? 0} sub="hoje" tone="teal" />
+        <MetricCard label="Aguardando aceite" value={counters.aguardando} sub="precisam de ação" tone="blue" />
+        <MetricCard label="Em andamento" value={dashboardStats?.active_calls ?? 0} sub="operação ativa" tone="teal" />
+        <MetricCard label="Atrasados" value={dashboardStats?.delayed_calls ?? 0} sub="SLA crítico" tone="red" />
+        <MetricCard label="Maqueiros disponíveis" value={counters.disponiveis} sub="para atribuição" tone="teal" />
         <MetricCard label="Maqueiros ocupados" value={dashboardStats?.busy_maqueiros ?? 0} sub="em transporte" tone="amber" />
         <MetricCard label="SLA no prazo" value={`${slaSummary.onTimePercent}%`} sub={`${slaSummary.onTime}/${calls.filter(c => c.accept_deadline_at).length || 0} chamados`} tone="teal" />
         <MetricCard label="Tempo médio aceite" value={formatSeconds(slaSummary.avgAcceptSeconds)} sub="média geral" tone="blue" />
         <MetricCard label="Tempo médio transporte" value={formatSeconds(slaSummary.avgTransportSeconds)} sub="origem até destino" tone="amber" />
       </section>
 
+      <section className="coord-intelligence-grid">
+        <CoordinatorAlertPanel alerts={intelligentAlerts} onNavigate={onNavigate} />
+        <UnassignedCallsPanel
+          calls={unassignedCalls}
+          maqueiros={maqueiros}
+          selectedMaqueiroByCall={selectedMaqueiroByCall}
+          setSelectedMaqueiroByCall={setSelectedMaqueiroByCall}
+          reassignCall={reassignCall}
+          loading={loading}
+          onNavigate={onNavigate}
+        />
+
+        <section className="panel coord-month-report-card">
+          <div className="coord-panel-head compact">
+            <div>
+              <span className="section-kicker">Relatório</span>
+              <h2>Operação mensal</h2>
+            </div>
+          </div>
+
+          <div className="operation-report-controls">
+            <label>
+              <span>Mês do relatório</span>
+              <input type="month" value={operationMonth} onChange={(event) => setOperationMonth(event.target.value || getCurrentMonthValue())} />
+            </label>
+            <button type="button" onClick={handleOperationReportPdf}>Gerar PDF geral</button>
+          </div>
+
+          <div className="operation-report-mini">
+            <div><small>Chamados</small><strong>{monthlyCalls.length}</strong></div>
+            <div><small>SLA</small><strong>{monthlySlaSummary.onTimePercent}%</strong></div>
+            <div><small>Atrasos</small><strong>{monthlySlaSummary.delayed}</strong></div>
+          </div>
+        </section>
+      </section>
+
       <section className="dashboard-grid">
         <div className="main-column">
+          <section className="coord-insights-grid">
+            <TeamHighlightsPanel ranking={teamRanking} />
+            <SectorDemandPanel items={sectorDemand} />
+          </section>
+
           <div className="panel table-panel">
             <div className="panel-title-row">
               <div>
@@ -890,9 +1375,7 @@ function OverviewPage(props) {
               </div>
 
               <div className="filter-row">
-                <select><option>Todos os setores</option></select>
-                <select><option>Todos os status</option></select>
-                <button className="filter-button">Filtros</button>
+                <button className="filter-button" onClick={() => onNavigate('calls')}>Abrir filtros</button>
               </div>
             </div>
 
@@ -914,28 +1397,14 @@ function OverviewPage(props) {
 
           <div className="quick-card-row">
             <button onClick={() => onNavigate('calls')}>Reatribuir <small>Selecionar e reatribuir chamado</small></button>
+            <button onClick={() => onNavigate('maqueiros')}>Histórico dos maqueiros <small>Ver progresso e relatório individual</small></button>
             <button onClick={() => onNavigate('sectors')}>Setores <small>Gerenciar setores e QR Codes</small></button>
             <button onClick={() => onNavigate('qrcodes')}>QR Codes <small>Imprimir códigos físicos</small></button>
           </div>
         </div>
 
         <aside className="right-column">
-          <div className="panel side-panel">
-            <h3>Alertas críticos <span>{alerts.length}</span></h3>
-            <div className="alert-list">
-              {alerts.length === 0 && <div className="empty-side">Nenhum alerta crítico.</div>}
-              {alerts.map(call => (
-                <article key={call.id} className="alert-item">
-                  <div className="alert-icon" />
-                  <div>
-                    <strong>Chamado #{call.number}</strong>
-                    <p>{call.origin?.name || '-'} → {call.destination?.name || '-'}</p>
-                  </div>
-                  <small>{formatValue(call.status)}</small>
-                </article>
-              ))}
-            </div>
-          </div>
+          <PeakHoursPanel peaks={peakHours} />
 
           <div className="panel side-panel">
             <h3>Maqueiros em tempo real <span>{maqueiros.length}</span></h3>
@@ -962,7 +1431,6 @@ function OverviewPage(props) {
     </>
   )
 }
-
 function CallsPage({
   calls,
   maqueiros,
@@ -1298,7 +1766,7 @@ function ProgressKpi({ label, value, helper }) {
   )
 }
 
-function MaqueiroProgressCard({ progress }) {
+function MaqueiroProgressCard({ progress, onOpenHistory }) {
   const { maqueiro, total, completed, activeCount, delayedCount, avgTransportSeconds, totalOperationSeconds, onTimePercent, lastCall } = progress
   const initials = String(getMaqueiroName(maqueiro)).slice(0, 1).toUpperCase()
   const efficiencyTone = onTimePercent >= 90 ? 'ok' : onTimePercent >= 70 ? 'warn' : 'danger'
@@ -1375,6 +1843,10 @@ function MaqueiroProgressCard({ progress }) {
           <strong>Nenhum registro neste mês</strong>
         </div>
       )}
+
+      <button type="button" className="maqueiro-history-button" onClick={() => onOpenHistory?.(maqueiro.id)}>
+        Ver histórico
+      </button>
     </article>
   )
 }
@@ -1382,6 +1854,7 @@ function MaqueiroProgressCard({ progress }) {
 
 function MaqueirosPage({ maqueiros, calls, profile, refreshData, loading }) {
   const [selectedMonth, setSelectedMonth] = useState(getCurrentMonthValue())
+  const [historyMaqueiroId, setHistoryMaqueiroId] = useState(null)
   const selectedMonthLabel = getMonthLabel(selectedMonth)
 
   const progressList = useMemo(() => {
@@ -1400,6 +1873,7 @@ function MaqueirosPage({ maqueiros, calls, profile, refreshData, loading }) {
       .filter(value => Number.isFinite(value))
   )
   const bestPerformer = progressList.find(item => item.completed > 0)
+  const historyProgress = progressList.find(item => item.maqueiro.id === historyMaqueiroId)
 
   function handleDownloadPdf() {
     try {
@@ -1590,11 +2064,17 @@ function MaqueirosPage({ maqueiros, calls, profile, refreshData, loading }) {
               <input
                 type="month"
                 value={selectedMonth}
-                onChange={(event) => setSelectedMonth(event.target.value || getCurrentMonthValue())}
+                onChange={(event) => {
+                  setSelectedMonth(event.target.value || getCurrentMonthValue())
+                  setHistoryMaqueiroId(null)
+                }}
               />
             </label>
 
-            <button type="button" className="light-button" onClick={() => setSelectedMonth(getCurrentMonthValue())}>
+            <button type="button" className="light-button" onClick={() => {
+              setSelectedMonth(getCurrentMonthValue())
+              setHistoryMaqueiroId(null)
+            }}>
               Mês atual
             </button>
 
@@ -1625,10 +2105,54 @@ function MaqueirosPage({ maqueiros, calls, profile, refreshData, loading }) {
           {progressList.length === 0 && <div className="empty-row">Nenhum maqueiro encontrado.</div>}
 
           {progressList.map(progress => (
-            <MaqueiroProgressCard key={progress.maqueiro.id} progress={progress} />
+            <MaqueiroProgressCard key={progress.maqueiro.id} progress={progress} onOpenHistory={setHistoryMaqueiroId} />
           ))}
         </div>
       </section>
+
+      {historyProgress && (
+        <section className="panel maqueiro-history-panel no-pdf">
+          <div className="maqueiro-history-head">
+            <div>
+              <span className="section-kicker">Histórico individual</span>
+              <h2>{getMaqueiroName(historyProgress.maqueiro)}</h2>
+              <p>Transportes registrados em {selectedMonthLabel}.</p>
+            </div>
+            <button type="button" className="light-button" onClick={() => setHistoryMaqueiroId(null)}>Fechar</button>
+          </div>
+
+          <div className="maqueiro-history-summary">
+            <ProgressKpi label="Transportes" value={historyProgress.total} helper="no período" />
+            <ProgressKpi label="Concluídos" value={historyProgress.completed} helper="finalizados" />
+            <ProgressKpi label="Atrasos" value={historyProgress.delayedCount} helper="SLA crítico" />
+            <ProgressKpi label="Tempo total" value={formatSeconds(historyProgress.totalOperationSeconds)} helper="operação" />
+          </div>
+
+          <div className="maqueiro-history-table">
+            <div className="maqueiro-history-row head">
+              <span>Chamado</span>
+              <span>Origem</span>
+              <span>Destino</span>
+              <span>Status</span>
+              <span>Tempo</span>
+              <span>Data</span>
+            </div>
+
+            {historyProgress.monthCalls.length === 0 && <div className="empty-row">Nenhum transporte para este maqueiro no período selecionado.</div>}
+
+            {historyProgress.monthCalls.slice(0, 18).map(call => (
+              <div className="maqueiro-history-row" key={call.id}>
+                <strong>#{call.number}</strong>
+                <span>{call.origin?.name || '-'}</span>
+                <span>{call.destination?.name || '-'}</span>
+                <StatusPill value={call.status} />
+                <span>{formatSeconds(getCallSla(call).totalSeconds)}</span>
+                <span>{formatDateTime(getCallReferenceDate(call))}</span>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
 
       <section className="panel table-panel no-pdf">
         <div className="panel-title-row">
