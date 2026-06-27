@@ -1,0 +1,203 @@
+
+/* v49 - Timeline do chamado no painel da enfermagem */
+.call-timeline-card {
+  margin: 18px 0;
+  padding: 20px;
+  border: 1px solid #dcecef;
+  border-radius: 24px;
+  background:
+    radial-gradient(circle at top left, rgba(0, 137, 139, .08), transparent 34%),
+    linear-gradient(135deg, #ffffff, #f7fcfc);
+  box-shadow: 0 16px 42px rgba(12, 73, 84, .07);
+}
+
+.call-timeline-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 18px;
+  margin-bottom: 16px;
+}
+
+.call-timeline-head h3 {
+  margin: 8px 0 4px;
+  color: #101828;
+  font-size: 22px;
+  letter-spacing: -.02em;
+}
+
+.call-timeline-head p {
+  margin: 0;
+  color: #667085;
+  font-size: 14px;
+  line-height: 1.45;
+}
+
+.timeline-counter {
+  min-width: 52px;
+  height: 38px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  background: #e9f8f8;
+  color: #08747c;
+  border: 1px solid #cfeeee;
+  font-weight: 900;
+}
+
+.timeline-metrics {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+  margin-bottom: 18px;
+}
+
+.timeline-metrics div {
+  padding: 12px;
+  border: 1px solid #e5eef1;
+  border-radius: 16px;
+  background: #ffffff;
+}
+
+.timeline-metrics small {
+  display: block;
+  margin-bottom: 4px;
+  color: #667085;
+  font-size: 11px;
+  font-weight: 900;
+  text-transform: uppercase;
+  letter-spacing: .04em;
+}
+
+.timeline-metrics strong {
+  color: #101828;
+  font-size: 18px;
+}
+
+.call-timeline-list {
+  position: relative;
+  display: grid;
+  gap: 12px;
+}
+
+.call-timeline-list::before {
+  content: "";
+  position: absolute;
+  left: 20px;
+  top: 18px;
+  bottom: 18px;
+  width: 2px;
+  background: #d7e7ea;
+}
+
+.timeline-event {
+  position: relative;
+  display: grid;
+  grid-template-columns: 42px 1fr;
+  gap: 12px;
+  align-items: flex-start;
+}
+
+.timeline-dot {
+  position: relative;
+  z-index: 1;
+  width: 42px;
+  height: 42px;
+  display: grid;
+  place-items: center;
+  border-radius: 999px;
+  background: #f2f7f8;
+  color: #98a2b3;
+  border: 1px solid #d7e7ea;
+}
+
+.timeline-event.done .timeline-dot {
+  background: linear-gradient(135deg, #00898b, #20c7c9);
+  border-color: transparent;
+  color: #ffffff;
+  box-shadow: 0 10px 24px rgba(0, 137, 139, .18);
+}
+
+.timeline-event.current .timeline-dot {
+  background: #fffbeb;
+  color: #b45309;
+  border-color: #fde68a;
+  animation: timelinePulse 1.4s ease-in-out infinite;
+}
+
+.timeline-event > div {
+  min-height: 64px;
+  padding: 12px 14px;
+  border: 1px solid #e5eef1;
+  border-radius: 18px;
+  background: #ffffff;
+}
+
+.timeline-event.done > div {
+  border-color: #cfeeee;
+  background: #fbffff;
+}
+
+.timeline-event.current > div {
+  border-color: #fde68a;
+  background: #fffbeb;
+}
+
+.timeline-event strong {
+  display: block;
+  color: #101828;
+  font-size: 15px;
+  margin-bottom: 4px;
+}
+
+.timeline-event p {
+  margin: 0 0 6px;
+  color: #667085;
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+.timeline-event small {
+  color: #08747c;
+  font-weight: 800;
+  font-size: 12px;
+}
+
+@keyframes timelinePulse {
+  0%, 100% {
+    box-shadow: 0 0 0 0 rgba(245, 158, 11, .24);
+  }
+
+  50% {
+    box-shadow: 0 0 0 8px rgba(245, 158, 11, 0);
+  }
+}
+
+@media (max-width: 720px) {
+  .call-timeline-card {
+    padding: 16px;
+  }
+
+  .call-timeline-head {
+    flex-direction: column;
+  }
+
+  .timeline-metrics {
+    grid-template-columns: 1fr;
+  }
+
+  .timeline-event {
+    grid-template-columns: 36px 1fr;
+    gap: 10px;
+  }
+
+  .timeline-dot {
+    width: 36px;
+    height: 36px;
+  }
+
+  .call-timeline-list::before {
+    left: 17px;
+  }
+}

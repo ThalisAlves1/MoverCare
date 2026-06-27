@@ -1,0 +1,214 @@
+
+/* v59 - Atalho de emergência no dashboard e rechamada urgente */
+.reference-hero-card .hero-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-left: auto;
+}
+
+.dashboard-emergency-shortcut {
+  background: #fff7ed !important;
+  color: #b42318 !important;
+  border: 1px solid #fed7aa !important;
+  box-shadow: none !important;
+}
+
+.dashboard-emergency-shortcut:hover {
+  background: #ffedd5 !important;
+  box-shadow: 0 10px 22px rgba(180, 35, 24, .10) !important;
+}
+
+.dashboard-emergency-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 99999;
+  display: grid;
+  place-items: center;
+  padding: 22px;
+  background: rgba(15, 23, 42, .42);
+  backdrop-filter: blur(8px);
+}
+
+.dashboard-emergency-modal {
+  position: relative;
+  width: min(560px, 100%);
+  padding: 28px;
+  border-radius: 26px;
+  background: #ffffff;
+  border: 1px solid #fecaca;
+  box-shadow: 0 30px 90px rgba(15, 23, 42, .24);
+}
+
+.dashboard-emergency-modal::before {
+  content: "";
+  position: absolute;
+  inset: 0 0 auto 0;
+  height: 7px;
+  border-radius: 26px 26px 0 0;
+  background: linear-gradient(90deg, #b42318, #ef4444, #f97316);
+}
+
+.dashboard-emergency-close {
+  position: absolute;
+  right: 16px;
+  top: 16px;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  display: grid;
+  place-items: center;
+  border-radius: 999px;
+  background: #f8fafc;
+  color: #475467;
+  border: 0;
+  box-shadow: none;
+}
+
+.dashboard-emergency-modal-head {
+  padding-right: 36px;
+  margin-bottom: 18px;
+}
+
+.dashboard-emergency-modal-head span {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  color: #b42318;
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  padding: 7px 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 900;
+  text-transform: uppercase;
+  letter-spacing: .06em;
+}
+
+.dashboard-emergency-modal-head h2 {
+  margin: 14px 0 6px;
+  color: #101828;
+  font-size: 30px;
+  letter-spacing: -.04em;
+}
+
+.dashboard-emergency-modal-head p {
+  margin: 0;
+  color: #667085;
+  line-height: 1.45;
+}
+
+.dashboard-emergency-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+
+.dashboard-emergency-grid label {
+  display: grid;
+  gap: 7px;
+  color: #344054;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.dashboard-emergency-grid input,
+.dashboard-emergency-grid select {
+  width: 100%;
+  min-height: 44px;
+  border: 1px solid #dcecef;
+  border-radius: 14px;
+  padding: 0 12px;
+  background: #ffffff;
+  color: #101828;
+  outline: none;
+}
+
+.dashboard-emergency-grid input:focus,
+.dashboard-emergency-grid select:focus {
+  border-color: #b42318;
+  box-shadow: 0 0 0 4px rgba(180, 35, 24, .08);
+}
+
+.dashboard-emergency-fixed {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin: 0 0 14px;
+}
+
+.dashboard-emergency-fixed span {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 8px 10px;
+  border-radius: 999px;
+  background: #fff7ed;
+  border: 1px solid #fed7aa;
+  color: #9a3412;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.dashboard-emergency-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 18px;
+}
+
+.dashboard-emergency-actions > button:first-child {
+  background: #b42318;
+  color: #ffffff;
+}
+
+.urgent-recall-button {
+  background: #fff7ed !important;
+  color: #b42318 !important;
+  border: 1px solid #fed7aa !important;
+  box-shadow: none !important;
+}
+
+.recall-grid.urgent-only {
+  grid-template-columns: 1fr !important;
+}
+
+.urgent-recall-summary {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  margin: 12px 0;
+  padding: 12px 14px;
+  border-radius: 16px;
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  color: #b42318;
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+.urgent-recall-summary strong {
+  color: #7f1d1d;
+}
+
+@media (max-width: 720px) {
+  .reference-hero-card .hero-actions {
+    width: 100%;
+    margin-left: 0;
+  }
+
+  .reference-hero-card .hero-actions button {
+    flex: 1;
+    justify-content: center;
+  }
+
+  .dashboard-emergency-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .dashboard-emergency-actions {
+    flex-direction: column;
+  }
+}

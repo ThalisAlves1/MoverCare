@@ -1,0 +1,54 @@
+/* v35 - Botão sair do painel Coordenador */
+.logout-button {
+  position: relative;
+  z-index: 2;
+  width: 100%;
+  min-height: 44px;
+  border: 1px solid rgba(220, 38, 38, 0.18);
+  border-radius: 16px;
+  background: rgba(254, 242, 242, 0.92);
+  color: #b42318;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+  font-weight: 900;
+  cursor: pointer;
+  transition: transform .18s ease, box-shadow .18s ease, background .18s ease;
+}
+
+.logout-button:hover {
+  background: #fee4e2;
+  box-shadow: 0 12px 28px rgba(180, 35, 24, 0.12);
+  transform: translateY(-1px);
+}
+
+.logout-button span {
+  font-size: 17px;
+  line-height: 1;
+}
+
+.mobile-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.mobile-logout {
+  width: auto;
+  min-height: 38px;
+  padding: 0 14px;
+  border-radius: 12px;
+}
+
+@media (max-width: 720px) {
+  .mobile-brand {
+    align-items: center;
+    gap: 10px;
+  }
+
+  .mobile-actions {
+    flex-wrap: wrap;
+    justify-content: flex-end;
+  }
+}

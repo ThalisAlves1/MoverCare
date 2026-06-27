@@ -1,0 +1,151 @@
+/* v27 - Tela de Perfil para Enfermagem e Coordenador */
+.profile-page-grid {
+  display: grid;
+  gap: 18px;
+}
+
+.profile-hero-card,
+.profile-info-card {
+  background: #ffffff;
+  border: 1px solid rgba(12, 73, 84, 0.10);
+  border-radius: 26px;
+  box-shadow: 0 18px 48px rgba(12, 73, 84, 0.08);
+}
+
+.profile-hero-card {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  padding: 24px;
+}
+
+.profile-avatar-large {
+  width: 96px;
+  height: 96px;
+  border-radius: 999px;
+  background: linear-gradient(135deg, #e7f8f8, #ffffff);
+  border: 3px solid rgba(10, 154, 164, 0.18);
+  color: #08747c;
+  display: grid;
+  place-items: center;
+  font-size: 34px;
+  font-weight: 900;
+  overflow: hidden;
+  flex: 0 0 auto;
+}
+
+.profile-avatar-large img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.profile-role-badge {
+  display: inline-flex;
+  align-items: center;
+  width: fit-content;
+  background: rgba(10, 154, 164, 0.10);
+  color: #08747c;
+  border: 1px solid rgba(10, 154, 164, 0.16);
+  border-radius: 999px;
+  padding: 7px 12px;
+  font-size: 12px;
+  font-weight: 800;
+  margin-bottom: 10px;
+}
+
+.profile-hero-card h2 {
+  margin: 0;
+  color: #102033;
+  font-size: 28px;
+  line-height: 1.1;
+}
+
+.profile-hero-card p {
+  margin: 8px 0 0;
+  color: #667085;
+  font-size: 14px;
+}
+
+.profile-info-card {
+  padding: 22px;
+}
+
+.profile-info-card h3 {
+  margin: 0 0 16px;
+  color: #102033;
+  font-size: 20px;
+}
+
+.profile-info-list {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.profile-info-list > div {
+  background: #f7fafb;
+  border: 1px solid #e1e9ec;
+  border-radius: 18px;
+  padding: 16px;
+}
+
+.profile-info-list small,
+.profile-status-row small {
+  display: block;
+  color: #667085;
+  font-size: 12px;
+  margin-bottom: 5px;
+}
+
+.profile-info-list strong,
+.profile-status-row strong {
+  display: block;
+  color: #102033;
+  font-size: 15px;
+  word-break: break-word;
+}
+
+.profile-status-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: #f7fafb;
+  border: 1px solid #e1e9ec;
+  border-radius: 18px;
+  padding: 16px;
+}
+
+.profile-status-dot {
+  width: 14px;
+  height: 14px;
+  border-radius: 999px;
+  background: #98a2b3;
+  box-shadow: 0 0 0 5px rgba(152, 162, 179, 0.15);
+}
+
+.profile-status-dot.ok {
+  background: #16a34a;
+  box-shadow: 0 0 0 5px rgba(22, 163, 74, 0.14);
+}
+
+.profile-status-dot.muted {
+  background: #98a2b3;
+}
+
+.profile-helper-text {
+  margin: 14px 0 0;
+  color: #667085;
+  font-size: 13px;
+}
+
+@media (max-width: 760px) {
+  .profile-hero-card {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .profile-info-list {
+    grid-template-columns: 1fr;
+  }
+}
