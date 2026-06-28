@@ -42,6 +42,7 @@ const PAGES = [
   { id: 'calls', label: 'Chamados', mark: <ClipboardList size={24} /> },
   { id: 'newcall', label: 'Novo Chamado', mark: <SquarePlus size={24} /> },
   { id: 'maqueiros', label: 'Maqueiros', mark: <Accessibility size={24} /> },
+  { id: 'employees', label: 'Funcionários', mark: <UsersRound size={24} /> },
   { id: 'map', label: 'Mapa', mark: <LocateFixed size={24} /> },
   { id: 'sectors', label: 'Setores', mark: '▦' },
   { id: 'qrcodes', label: 'QR Codes', mark: <ScanQrCode size={24} /> },
@@ -3284,6 +3285,532 @@ function NewCallPage({ sectors, profile, onCreated, onNavigate }) {
 }
 
 
+const EMPLOYEE_ROLES = [
+  { value: 'MAQUEIRO', label: 'Maqueiro' },
+  { value: 'ENFERMEIRA', label: 'Enfermagem' },
+  { value: 'COORDENADOR', label: 'Coordenador' },
+  { value: 'ADMIN', label: 'Administrador' }
+]
+
+const EMPTY_EMPLOYEE_FORM = {
+  id: null,
+  full_name: '',
+  email: '',
+  phone: '',
+  role: 'MAQUEIRO',
+  password: '',
+  active: true
+}
+
+function employeeDisplayName(employee) {
+  return employee?.full_name || employee?.name || employee?.email || 'Funcionário'
+}
+
+function employeeInitials(employee) {
+  return String(employeeDisplayName(employee))
+    .split(' ')
+    .filter(Boolean)
+    .slice(0, 2)
+    .map(part => part[0])
+    .join('')
+    .toUpperCase()
+}
+
+function normalizeEmployeeForm(employee = {}) {
+  return {
+    id: employee.id || null,
+    full_name: employee.full_name || employee.name || '',
+    email: employee.email || '',
+    phone: employee.phone || employee.telefone || employee.phone_number || '',
+    role: employee.role || 'MAQUEIRO',
+    password: '',
+    active: employee.active !== false
+  }
+}
+
+function EmployeeModal({ title, subtitle, children, onClose }) {
+  return (
+    <div className="employee-modal-backdrop" role="presentation" onMouseDown={onClose}>
+      <section className="employee-modal" role="dialog" aria-modal="true" onMouseDown={(event) => event.stopPropagation()}>
+        <div className="employee-modal-header">
+          <div>
+            <h2>{title}</h2>
+            {subtitle && <p>{subtitle}</p>}
+          </div>
+          <button type="button" className="employee-icon-button" onClick={onClose} aria-label="Fechar modal">×</button>
+        </div>
+        {children}
+      </section>
+    </div>
+  )
+}
+
+function EmployeesPage({ employees, profile, refreshEmployees, registerAudit, setGlobalSuccess, setGlobalError }) {
+  const [search, setSearch] = useState('')
+  const [roleFilter, setRoleFilter] = useState('TODOS')
+  const [modalMode, setModalMode] = useState(null)
+  const [form, setForm] = useState(EMPTY_EMPLOYEE_FORM)
+  const [selectedEmployee, setSelectedEmployee] = useState(null)
+  const [saving, setSaving] = useState(false)
+  const [localError, setLocalError] = useState('')
+  const [localSuccess, setLocalSuccess] = useState('')
+
+  const filteredEmployees = useMemo(() => {
+    const term = normalizeText(search)
+
+    return (employees || [])
+      .filter(employee => {
+        const matchesSearch = !term || [
+          employeeDisplayName(employee),
+          employee.email,
+          employee.phone,
+          employee.role
+        ].some(value => normalizeText(value).includes(term))
+
+        const matchesRole = roleFilter === 'TODOS' || employee.role === roleFilter
+
+        return matchesSearch && matchesRole
+      })
+      .sort((a, b) => employeeDisplayName(a).localeCompare(employeeDisplayName(b)))
+  }, [employees, search, roleFilter])
+
+  const activeCount = (employees || []).filter(employee => employee.active !== false).length
+  const inactiveCount = (employees || []).filter(employee => employee.active === false).length
+  const maqueiroCount = (employees || []).filter(employee => employee.role === 'MAQUEIRO').length
+
+  function updateForm(field, value) {
+    setForm(prev => ({ ...prev, [field]: value }))
+  }
+
+  function openCreateModal() {
+    setForm({ ...EMPTY_EMPLOYEE_FORM, password: generateTemporaryPassword() })
+    setSelectedEmployee(null)
+    setLocalError('')
+    setLocalSuccess('')
+    setModalMode('create')
+  }
+
+  function openEditModal(employee) {
+    setForm(normalizeEmployeeForm(employee))
+    setSelectedEmployee(employee)
+    setLocalError('')
+    setLocalSuccess('')
+    setModalMode('edit')
+  }
+
+  function openResetPasswordModal(employee) {
+    setForm({ ...normalizeEmployeeForm(employee), password: generateTemporaryPassword() })
+    setSelectedEmployee(employee)
+    setLocalError('')
+    setLocalSuccess('')
+    setModalMode('reset-password')
+  }
+
+  function closeModal() {
+    if (saving) return
+    setModalMode(null)
+    setSelectedEmployee(null)
+    setForm(EMPTY_EMPLOYEE_FORM)
+    setLocalError('')
+    setLocalSuccess('')
+  }
+
+  function validateEmployeeForm({ requirePassword = false } = {}) {
+    if (!form.full_name.trim()) throw new Error('Informe o nome completo.')
+    if (!form.email.trim()) throw new Error('Informe o e-mail.')
+    if (!form.email.includes('@')) throw new Error('Informe um e-mail válido.')
+    if (!form.role) throw new Error('Selecione o cargo.')
+    if (requirePassword && (!form.password || form.password.length < 6)) {
+      throw new Error('A senha precisa ter pelo menos 6 caracteres.')
+    }
+  }
+
+  async function invokeAdminUsers(action, payload = {}) {
+    const { data, error } = await supabase.functions.invoke('coordinator-admin-users', {
+      body: {
+        action,
+        payload
+      }
+    })
+
+    if (error) {
+      let message = error.message || 'Erro ao chamar função segura do Supabase.'
+
+      try {
+        if (error.context) {
+          const responseBody = await error.context.json()
+          message = responseBody?.error || responseBody?.message || message
+        }
+      } catch (_parseError) {
+        // Mantém a mensagem padrão se a resposta da Edge Function não vier em JSON.
+      }
+
+      throw new Error(message)
+    }
+
+    if (data?.error) {
+      throw new Error(data.error)
+    }
+
+    return data
+  }
+
+  async function handleCreateEmployee(event) {
+    event.preventDefault()
+    setSaving(true)
+    setLocalError('')
+    setLocalSuccess('')
+
+    try {
+      validateEmployeeForm({ requirePassword: true })
+
+      await invokeAdminUsers('create', {
+        full_name: form.full_name.trim(),
+        email: form.email.trim().toLowerCase(),
+        phone: form.phone.trim(),
+        role: form.role,
+        password: form.password,
+        active: form.active
+      })
+
+      await refreshEmployees()
+      await registerAudit?.('FUNCIONÁRIO', `Cadastrou funcionário ${form.full_name.trim()} (${form.role})`, { email: form.email, role: form.role })
+      setGlobalSuccess?.('Funcionário cadastrado com sucesso.')
+      setLocalSuccess('Funcionário cadastrado com sucesso.')
+      closeModal()
+    } catch (error) {
+      setLocalError(error?.message || 'Erro ao cadastrar funcionário.')
+      setGlobalError?.(error?.message || 'Erro ao cadastrar funcionário.')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  async function handleEditEmployee(event) {
+    event.preventDefault()
+    if (!selectedEmployee?.id) return
+
+    setSaving(true)
+    setLocalError('')
+    setLocalSuccess('')
+
+    try {
+      validateEmployeeForm()
+
+      await invokeAdminUsers('update', {
+        id: selectedEmployee.id,
+        full_name: form.full_name.trim(),
+        email: form.email.trim().toLowerCase(),
+        phone: form.phone.trim(),
+        role: form.role,
+        active: form.active
+      })
+
+      await refreshEmployees()
+      await registerAudit?.('FUNCIONÁRIO', `Editou funcionário ${form.full_name.trim()}`, { id: selectedEmployee.id, role: form.role })
+      setGlobalSuccess?.('Funcionário atualizado com sucesso.')
+      closeModal()
+    } catch (error) {
+      setLocalError(error?.message || 'Erro ao editar funcionário.')
+      setGlobalError?.(error?.message || 'Erro ao editar funcionário.')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  async function handleResetPassword(event) {
+    event.preventDefault()
+    if (!selectedEmployee?.id) return
+
+    setSaving(true)
+    setLocalError('')
+    setLocalSuccess('')
+
+    try {
+      if (!form.password || form.password.length < 6) {
+        throw new Error('A nova senha precisa ter pelo menos 6 caracteres.')
+      }
+
+      await invokeAdminUsers('reset-password', {
+        id: selectedEmployee.id,
+        password: form.password
+      })
+
+      await registerAudit?.('SENHA', `Resetou senha de ${employeeDisplayName(selectedEmployee)}`, { id: selectedEmployee.id })
+      setGlobalSuccess?.('Senha redefinida com sucesso.')
+      setLocalSuccess(`Senha redefinida. Informe a senha temporária: ${form.password}`)
+    } catch (error) {
+      setLocalError(error?.message || 'Erro ao resetar senha.')
+      setGlobalError?.(error?.message || 'Erro ao resetar senha.')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  async function toggleEmployeeActive(employee) {
+    const nextActive = employee.active === false
+    const label = nextActive ? 'ativar' : 'desativar'
+    const ok = window.confirm(`Deseja ${label} ${employeeDisplayName(employee)}?`)
+    if (!ok) return
+
+    setSaving(true)
+    setGlobalError?.('')
+    setGlobalSuccess?.('')
+
+    try {
+      await invokeAdminUsers('set-active', {
+        id: employee.id,
+        active: nextActive
+      })
+
+      await refreshEmployees()
+      await registerAudit?.('FUNCIONÁRIO', `${nextActive ? 'Ativou' : 'Desativou'} funcionário ${employeeDisplayName(employee)}`, { id: employee.id })
+      setGlobalSuccess?.(nextActive ? 'Funcionário ativado.' : 'Funcionário desativado.')
+    } catch (error) {
+      setGlobalError?.(error?.message || 'Erro ao alterar status do funcionário.')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <>
+      <PageHeader
+        title="Funcionários"
+        subtitle="Cadastre acessos para app do maqueiro, portal enfermagem e portal coordenador"
+        profile={profile}
+        right={<button type="button" onClick={openCreateModal}>+ Novo funcionário</button>}
+      />
+
+      <section className="employee-stats-grid">
+        <MetricCard label="Funcionários" value={(employees || []).length} sub="Total cadastrado" tone="info" />
+        <MetricCard label="Ativos" value={activeCount} sub="Podem acessar" tone="ok" />
+        <MetricCard label="Inativos" value={inactiveCount} sub="Acesso bloqueado" tone="warn" />
+        <MetricCard label="Maqueiros" value={maqueiroCount} sub="Operação mobile" tone="info" />
+      </section>
+
+      <section className="panel table-panel employees-panel">
+        <div className="panel-title-row employees-toolbar">
+          <div>
+            <h2>Equipe cadastrada</h2>
+            <span className="count-badge">{filteredEmployees.length}</span>
+          </div>
+
+          <div className="employee-filters">
+            <input
+              value={search}
+              onChange={(event) => setSearch(event.target.value)}
+              placeholder="Buscar por nome, e-mail, telefone..."
+            />
+            <select value={roleFilter} onChange={(event) => setRoleFilter(event.target.value)}>
+              <option value="TODOS">Todos os cargos</option>
+              {EMPLOYEE_ROLES.map(role => (
+                <option key={role.value} value={role.value}>{role.label}</option>
+              ))}
+            </select>
+            <button type="button" className="light-button" onClick={refreshEmployees}>Atualizar</button>
+          </div>
+        </div>
+
+        <div className="employees-table">
+          <div className="employees-head">
+            <span>Funcionário</span>
+            <span>Cargo</span>
+            <span>Status</span>
+            <span>Contato</span>
+            <span>Ações</span>
+          </div>
+
+          {filteredEmployees.length === 0 && <div className="empty-row">Nenhum funcionário encontrado.</div>}
+
+          {filteredEmployees.map(employee => (
+            <div className="employees-row" key={employee.id}>
+              <div className="person-cell">
+                <span className="avatar">{employeeInitials(employee)}</span>
+                <div>
+                  <strong>{employeeDisplayName(employee)}</strong>
+                  <small>{employee.email || 'E-mail não cadastrado'}</small>
+                </div>
+              </div>
+
+              <SoftPill tone={employee.role === 'MAQUEIRO' ? 'success-soft' : employee.role === 'COORDENADOR' || employee.role === 'ADMIN' ? 'warning-soft' : 'neutral-soft'}>
+                {formatValue(employee.role)}
+              </SoftPill>
+
+              <span className={`status-pill ${employee.active === false ? 'muted' : 'ok'}`}>
+                {employee.active === false ? 'Inativo' : 'Ativo'}
+              </span>
+
+              <div className="employee-contact-cell">
+                <strong>{employee.phone || 'Sem telefone'}</strong>
+                <small>{employee.id}</small>
+              </div>
+
+              <div className="employee-actions">
+                <button type="button" className="light-button small" onClick={() => openEditModal(employee)}>Editar</button>
+                <button type="button" className="light-button small" onClick={() => openResetPasswordModal(employee)}>Resetar senha</button>
+                <button type="button" className={employee.active === false ? 'small' : 'danger small'} onClick={() => toggleEmployeeActive(employee)} disabled={saving || employee.id === profile?.id}>
+                  {employee.active === false ? 'Ativar' : 'Desativar'}
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      {modalMode === 'create' && (
+        <EmployeeModal title="Novo funcionário" subtitle="Cria usuário no Supabase Auth e perfil no MoverCare" onClose={closeModal}>
+          <EmployeeForm
+            form={form}
+            updateForm={updateForm}
+            saving={saving}
+            localError={localError}
+            localSuccess={localSuccess}
+            submitLabel="Cadastrar funcionário"
+            onSubmit={handleCreateEmployee}
+            showPassword
+            showActive
+          />
+        </EmployeeModal>
+      )}
+
+      {modalMode === 'edit' && (
+        <EmployeeModal title="Editar funcionário" subtitle={employeeDisplayName(selectedEmployee)} onClose={closeModal}>
+          <EmployeeForm
+            form={form}
+            updateForm={updateForm}
+            saving={saving}
+            localError={localError}
+            localSuccess={localSuccess}
+            submitLabel="Salvar alterações"
+            onSubmit={handleEditEmployee}
+            showActive
+          />
+        </EmployeeModal>
+      )}
+
+      {modalMode === 'reset-password' && (
+        <EmployeeModal title="Resetar senha" subtitle={employeeDisplayName(selectedEmployee)} onClose={closeModal}>
+          <form className="employee-form" onSubmit={handleResetPassword}>
+            {localError && <div className="error no-print">{localError}</div>}
+            {localSuccess && <div className="success no-print">{localSuccess}</div>}
+
+            <div className="employee-warning-box">
+              <strong>Atenção</strong>
+              <p>O coordenador não vê a senha antiga. Aqui você define uma nova senha temporária para o funcionário acessar novamente.</p>
+            </div>
+
+            <label>
+              <span>Nova senha temporária</span>
+              <div className="employee-password-line">
+                <input
+                  type="text"
+                  value={form.password}
+                  onChange={(event) => updateForm('password', event.target.value)}
+                  minLength={6}
+                  required
+                />
+                <button type="button" className="light-button" onClick={() => updateForm('password', generateTemporaryPassword())}>Gerar</button>
+              </div>
+            </label>
+
+            <div className="employee-modal-actions">
+              <button type="button" className="light-button" onClick={closeModal} disabled={saving}>Fechar</button>
+              <button type="submit" disabled={saving}>{saving ? 'Salvando...' : 'Resetar senha'}</button>
+            </div>
+          </form>
+        </EmployeeModal>
+      )}
+    </>
+  )
+}
+
+
+function EmployeeForm({ form, updateForm, saving, localError, localSuccess, submitLabel, onSubmit, showPassword = false, showActive = false }) {
+  return (
+    <form className="employee-form" onSubmit={onSubmit}>
+      {localError && <div className="error no-print">{localError}</div>}
+      {localSuccess && <div className="success no-print">{localSuccess}</div>}
+
+      <label>
+        <span>Nome completo</span>
+        <input
+          value={form.full_name}
+          onChange={(event) => updateForm('full_name', event.target.value)}
+          placeholder="Ex.: João Silva"
+          required
+        />
+      </label>
+
+      <label>
+        <span>E-mail de acesso</span>
+        <input
+          type="email"
+          value={form.email}
+          onChange={(event) => updateForm('email', event.target.value)}
+          placeholder="funcionario@movercare.com"
+          required
+        />
+      </label>
+
+      <label>
+        <span>Telefone</span>
+        <input
+          value={form.phone}
+          onChange={(event) => updateForm('phone', event.target.value)}
+          placeholder="(00) 00000-0000"
+        />
+      </label>
+
+      <label>
+        <span>Cargo</span>
+        <select value={form.role} onChange={(event) => updateForm('role', event.target.value)} required>
+          {EMPLOYEE_ROLES.map(role => (
+            <option key={role.value} value={role.value}>{role.label}</option>
+          ))}
+        </select>
+      </label>
+
+      {showPassword && (
+        <label>
+          <span>Senha temporária</span>
+          <div className="employee-password-line">
+            <input
+              type="text"
+              value={form.password}
+              onChange={(event) => updateForm('password', event.target.value)}
+              minLength={6}
+              required
+            />
+            <button type="button" className="light-button" onClick={() => updateForm('password', generateTemporaryPassword())}>Gerar</button>
+          </div>
+        </label>
+      )}
+
+      {showActive && (
+        <label className="check-row employee-check-row">
+          <input
+            type="checkbox"
+            checked={form.active}
+            onChange={(event) => updateForm('active', event.target.checked)}
+          />
+          Funcionário ativo
+        </label>
+      )}
+
+      <div className="employee-modal-actions">
+        <button type="submit" disabled={saving}>{saving ? 'Salvando...' : submitLabel}</button>
+      </div>
+    </form>
+  )
+}
+
+function generateTemporaryPassword() {
+  const number = Math.floor(100 + Math.random() * 900)
+  return `MoverCare@${number}`
+}
+
+
 function ProfilePage({ profile, sectors }) {
   const fullName = profileField(profile, ['full_name', 'name'], 'Usuário')
   const email = profileField(profile, ['email'], 'E-mail não cadastrado')
@@ -3421,6 +3948,7 @@ function App() {
   const [loading, setLoading] = useState(false)
   const [calls, setCalls] = useState([])
   const [maqueiros, setMaqueiros] = useState([])
+  const [employees, setEmployees] = useState([])
   const [dashboardStats, setDashboardStats] = useState(null)
   const [sectors, setSectors] = useState([])
   const [sectorForm, setSectorForm] = useState(EMPTY_SECTOR_FORM)
@@ -3444,6 +3972,7 @@ function App() {
         setProfile(null)
         setCalls([])
         setMaqueiros([])
+        setEmployees([])
         setDashboardStats(null)
         setSectors([])
       }
@@ -3508,6 +4037,7 @@ function App() {
     await Promise.all([
       loadCalls(),
       loadMaqueiros(),
+      loadEmployees(),
       loadDashboardStats(),
       loadSectors()
     ])
@@ -3568,6 +4098,33 @@ function App() {
     }
 
     setMaqueiros(data || [])
+  }
+
+
+  async function loadEmployees() {
+    const { data, error: functionError } = await supabase.functions.invoke('coordinator-admin-users', {
+      body: { action: 'list' }
+    })
+
+    if (!functionError && data?.employees) {
+      setEmployees(data.employees)
+      return
+    }
+
+    console.warn('Edge Function coordinator-admin-users indisponível:', functionError?.message || functionError)
+
+    const { data: fallbackData, error: fallbackError } = await supabase
+      .from('profiles')
+      .select('*')
+      .order('full_name', { ascending: true, nullsFirst: false })
+
+    if (fallbackError) {
+      setEmployees([])
+      setError(`Não foi possível carregar funcionários. Rode o SQL e publique a Edge Function. ${functionError?.message || fallbackError.message || ''}`)
+      return
+    }
+
+    setEmployees(fallbackData || [])
   }
 
   async function loadDashboardStats() {
@@ -4163,6 +4720,17 @@ function App() {
               refreshData={refreshData}
               loading={loading}
               registerAudit={registerAudit}
+            />
+          )}
+
+          {activePage === 'employees' && (
+            <EmployeesPage
+              employees={employees}
+              profile={profile}
+              refreshEmployees={loadEmployees}
+              registerAudit={registerAudit}
+              setGlobalSuccess={setSuccess}
+              setGlobalError={setError}
             />
           )}
 

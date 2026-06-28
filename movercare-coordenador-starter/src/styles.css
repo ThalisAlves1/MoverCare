@@ -5725,3 +5725,260 @@ button {
   background: rgba(245, 159, 11, 0.14) !important;
   color: #d97706 !important;
 }
+
+/* ============================================================
+   Funcionários - Portal Coordenador
+   Cadastro, edição, ativação/desativação e reset de senha
+   ============================================================ */
+.employee-stats-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+  gap: 12px;
+  margin-bottom: 18px;
+}
+
+.employees-panel {
+  overflow-x: auto;
+}
+
+.employees-toolbar {
+  align-items: flex-start !important;
+}
+
+.employee-filters {
+  display: grid;
+  grid-template-columns: minmax(240px, 1fr) 170px auto;
+  gap: 10px;
+  width: min(720px, 100%);
+}
+
+.employees-table {
+  min-width: 980px;
+}
+
+.employees-head,
+.employees-row {
+  display: grid;
+  grid-template-columns: 1.55fr 150px 110px 1.1fr 310px;
+  gap: 12px;
+  align-items: center;
+}
+
+.employees-head {
+  padding: 12px 18px;
+  background: #fbfcfd;
+  border-top: 1px solid #e4eaee;
+  border-bottom: 1px solid #e4eaee;
+  color: #667085;
+  font-size: 12px;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.employees-row {
+  padding: 14px 18px;
+  border-bottom: 1px solid #edf2f5;
+  color: #344054;
+}
+
+.employees-row:last-child {
+  border-bottom: 0;
+}
+
+.employee-contact-cell strong,
+.employee-contact-cell small {
+  display: block;
+}
+
+.employee-contact-cell strong {
+  color: #27364a;
+  font-size: 13px;
+}
+
+.employee-contact-cell small {
+  color: #667085;
+  font-size: 11px;
+  word-break: break-all;
+  margin-top: 3px;
+}
+
+.employee-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.employee-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 2000;
+  display: grid;
+  place-items: center;
+  padding: 20px;
+  background: rgba(2, 16, 34, .48);
+  backdrop-filter: blur(6px);
+}
+
+.employee-modal {
+  width: min(620px, 100%);
+  max-height: min(92vh, 860px);
+  overflow: auto;
+  background: #ffffff;
+  border: 1px solid #e4eaee;
+  border-radius: 18px;
+  box-shadow: 0 24px 70px rgba(15, 23, 42, .24);
+}
+
+.employee-modal-header {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 20px 22px 14px;
+  background: linear-gradient(180deg, #ffffff 0%, rgba(255,255,255,.96) 100%);
+  border-bottom: 1px solid #eef3f6;
+}
+
+.employee-modal-header h2 {
+  margin: 0;
+  color: #0f172a;
+  font-size: 18px;
+}
+
+.employee-modal-header p {
+  margin: 5px 0 0;
+  color: #64748b;
+  font-size: 13px;
+}
+
+.employee-icon-button {
+  width: 36px;
+  height: 36px;
+  display: inline-grid;
+  place-items: center;
+  padding: 0;
+  border-radius: 999px;
+  background: #f1f5f9;
+  color: #334155;
+  font-size: 22px;
+  line-height: 1;
+}
+
+.employee-icon-button:hover {
+  background: #e2e8f0;
+}
+
+.employee-form {
+  display: grid;
+  gap: 12px;
+  padding: 18px 22px 22px;
+}
+
+.employee-form label {
+  margin: 0;
+}
+
+.employee-form label span {
+  display: block;
+  margin-bottom: 7px;
+  color: #27364a;
+  font-size: 13px;
+  font-weight: 700 !important;
+}
+
+.employee-password-line {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+}
+
+.employee-check-row {
+  display: flex !important;
+  align-items: center;
+  gap: 8px;
+  margin-top: 2px !important;
+}
+
+.employee-check-row input {
+  width: auto;
+}
+
+.employee-modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 4px;
+}
+
+.employee-warning-box {
+  padding: 14px;
+  border-radius: 14px;
+  background: #fff7ed;
+  border: 1px solid #fed7aa;
+  color: #9a3412;
+}
+
+.employee-warning-box strong {
+  display: block;
+  margin-bottom: 4px;
+}
+
+.employee-warning-box p {
+  margin: 0;
+  color: #9a3412;
+  font-size: 13px;
+}
+
+.coord-shell--dark .employee-modal {
+  background: #0f172a;
+  border-color: rgba(148, 163, 184, .25);
+}
+
+.coord-shell--dark .employee-modal-header {
+  background: linear-gradient(180deg, #0f172a 0%, rgba(15,23,42,.96) 100%);
+  border-bottom-color: rgba(148, 163, 184, .18);
+}
+
+.coord-shell--dark .employee-modal-header h2,
+.coord-shell--dark .employee-form label span,
+.coord-shell--dark .employee-contact-cell strong {
+  color: #e2e8f0;
+}
+
+.coord-shell--dark .employee-modal-header p,
+.coord-shell--dark .employee-contact-cell small {
+  color: #94a3b8;
+}
+
+@media (max-width: 980px) {
+  .employee-filters {
+    grid-template-columns: 1fr;
+    width: 100%;
+  }
+
+  .employees-toolbar {
+    display: grid !important;
+  }
+}
+
+@media (max-width: 720px) {
+  .employee-modal-backdrop {
+    align-items: end;
+    padding: 10px;
+  }
+
+  .employee-modal {
+    width: 100%;
+    border-radius: 18px 18px 12px 12px;
+  }
+
+  .employee-password-line,
+  .employee-modal-actions {
+    grid-template-columns: 1fr;
+    display: grid;
+  }
+}
