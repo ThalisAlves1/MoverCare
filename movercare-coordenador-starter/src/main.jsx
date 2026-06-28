@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react'
+import React, { useEffect, useMemo, useRef, useState } from 'react'
 import { createRoot } from 'react-dom/client'
 import QRCode from 'qrcode'
 import jsPDF from 'jspdf'
@@ -3009,6 +3009,10 @@ function NewCallPage({ sectors, profile, onCreated, onNavigate }) {
   const [savingCall, setSavingCall] = useState(false)
   const [localError, setLocalError] = useState('')
   const [localSuccess, setLocalSuccess] = useState('')
+  const [bulkRows, setBulkRows] = useState([])
+  const [bulkFileName, setBulkFileName] = useState('')
+  const [bulkImporting, setBulkImporting] = useState(false)
+  const [bulkResult, setBulkResult] = useState(null)
 
   useEffect(() => {
     setForm(prev => ({
@@ -3328,6 +3332,194 @@ function normalizeEmployeeForm(employee = {}) {
   }
 }
 
+
+
+const EMPLOYEE_BULK_TEMPLATE_ROWS = [
+  ['full_name', 'email', 'phone', 'role', 'password', 'active'],
+  ['João Silva', 'joao@movercare.com', '11999999999', 'MAQUEIRO', 'MoverCare@123', 'SIM'],
+  ['Maria Souza', 'maria@movercare.com', '11988888888', 'ENFERMEIRA', 'MoverCare@123', 'SIM'],
+  ['Carlos Lima', 'carlos@movercare.com', '11977777777', 'COORDENADOR', 'MoverCare@123', 'SIM']
+]
+
+const EMPLOYEE_BULK_HEADER_MAP = {
+  full_name: 'full_name',
+  fullname: 'full_name',
+  nome: 'full_name',
+  nomecompleto: 'full_name',
+  nome_completo: 'full_name',
+  name: 'full_name',
+  email: 'email',
+  'e-mail': 'email',
+  mail: 'email',
+  phone: 'phone',
+  telefone: 'phone',
+  celular: 'phone',
+  whatsapp: 'phone',
+  role: 'role',
+  cargo: 'role',
+  perfil: 'role',
+  funcao: 'role',
+  função: 'role',
+  password: 'password',
+  senha: 'password',
+  senhatemporaria: 'password',
+  senha_temporaria: 'password',
+  active: 'active',
+  ativo: 'active',
+  status: 'active'
+}
+
+function normalizeBulkHeader(value) {
+  return normalizeText(value)
+    .replace(/[^a-z0-9_-]/g, '')
+}
+
+function parseCsvText(text) {
+  const rows = []
+  let row = []
+  let current = ''
+  let insideQuotes = false
+
+  for (let index = 0; index < text.length; index += 1) {
+    const char = text[index]
+    const nextChar = text[index + 1]
+
+    if (char === '"' && insideQuotes && nextChar === '"') {
+      current += '"'
+      index += 1
+      continue
+    }
+
+    if (char === '"') {
+      insideQuotes = !insideQuotes
+      continue
+    }
+
+    if ((char === ',' || char === ';') && !insideQuotes) {
+      row.push(current.trim())
+      current = ''
+      continue
+    }
+
+    if ((char === '\n' || char === '\r') && !insideQuotes) {
+      if (char === '\r' && nextChar === '\n') index += 1
+      row.push(current.trim())
+      if (row.some(cell => String(cell || '').trim())) rows.push(row)
+      row = []
+      current = ''
+      continue
+    }
+
+    current += char
+  }
+
+  row.push(current.trim())
+  if (row.some(cell => String(cell || '').trim())) rows.push(row)
+
+  return rows
+}
+
+function normalizeBulkRole(value) {
+  const role = normalizeText(value).replace(/[^a-z0-9]/g, '')
+
+  if (role === 'maqueiro' || role === 'maca' || role === 'maqueiros') return 'MAQUEIRO'
+  if (role === 'enfermeira' || role === 'enfermagem' || role === 'enfermeiro') return 'ENFERMEIRA'
+  if (role === 'coordenador' || role === 'coordenacao' || role === 'coordenação') return 'COORDENADOR'
+  if (role === 'admin' || role === 'administrador') return 'ADMIN'
+
+  return cleanText(value).toUpperCase()
+}
+
+function normalizeBulkActive(value) {
+  const active = normalizeText(value)
+
+  if (!active) return true
+  if (['sim', 's', 'true', 'ativo', '1', 'yes'].includes(active)) return true
+  if (['nao', 'não', 'n', 'false', 'inativo', '0', 'no'].includes(active)) return false
+
+  return true
+}
+
+function createCsvDownload(rows, filename) {
+  const csv = rows
+    .map(row => row.map(cell => {
+      const value = String(cell ?? '')
+      return /[",;\n\r]/.test(value) ? `"${value.replaceAll('"', '""')}"` : value
+    }).join(','))
+    .join('\n')
+
+  const blob = new Blob([`\ufeff${csv}`], { type: 'text/csv;charset=utf-8;' })
+  const url = URL.createObjectURL(blob)
+  const link = document.createElement('a')
+  link.href = url
+  link.download = filename
+  document.body.appendChild(link)
+  link.click()
+  link.remove()
+  URL.revokeObjectURL(url)
+}
+
+function downloadEmployeesCsvTemplate() {
+  createCsvDownload(EMPLOYEE_BULK_TEMPLATE_ROWS, 'modelo_funcionarios_movercare.csv')
+}
+
+function parseEmployeesCsv(text) {
+  const rows = parseCsvText(text)
+
+  if (rows.length < 2) {
+    throw new Error('A planilha precisa ter cabeçalho e pelo menos uma linha de funcionário.')
+  }
+
+  const header = rows[0].map(cell => EMPLOYEE_BULK_HEADER_MAP[normalizeBulkHeader(cell)] || '')
+
+  const required = ['full_name', 'email', 'role']
+  const missing = required.filter(field => !header.includes(field))
+
+  if (missing.length > 0) {
+    throw new Error('Cabeçalho inválido. Use as colunas: full_name, email, phone, role, password, active.')
+  }
+
+  return rows.slice(1).map((row, index) => {
+    const item = {
+      line: index + 2,
+      full_name: '',
+      email: '',
+      phone: '',
+      role: 'MAQUEIRO',
+      password: '',
+      active: true,
+      valid: true,
+      error: ''
+    }
+
+    header.forEach((field, columnIndex) => {
+      if (!field) return
+      const value = row[columnIndex] || ''
+
+      if (field === 'role') item.role = normalizeBulkRole(value)
+      else if (field === 'active') item.active = normalizeBulkActive(value)
+      else item[field] = String(value || '').trim()
+    })
+
+    if (!item.password) item.password = generateTemporaryPassword()
+    item.email = item.email.toLowerCase()
+
+    const errors = []
+
+    if (!item.full_name) errors.push('nome vazio')
+    if (!item.email || !item.email.includes('@')) errors.push('e-mail inválido')
+    if (!EMPLOYEE_ROLES.some(role => role.value === item.role)) errors.push('cargo inválido')
+    if (!item.password || item.password.length < 6) errors.push('senha menor que 6 caracteres')
+
+    if (errors.length > 0) {
+      item.valid = false
+      item.error = errors.join(', ')
+    }
+
+    return item
+  })
+}
+
 function EmployeeModal({ title, subtitle, children, onClose }) {
   return (
     <div className="employee-modal-backdrop" role="presentation" onMouseDown={onClose}>
@@ -3354,6 +3546,11 @@ function EmployeesPage({ employees, profile, refreshEmployees, registerAudit, se
   const [saving, setSaving] = useState(false)
   const [localError, setLocalError] = useState('')
   const [localSuccess, setLocalSuccess] = useState('')
+  const [bulkRows, setBulkRows] = useState([])
+  const [bulkFileName, setBulkFileName] = useState('')
+  const [bulkImporting, setBulkImporting] = useState(false)
+  const [bulkResult, setBulkResult] = useState(null)
+  const bulkFileInputRef = useRef(null)
 
   const filteredEmployees = useMemo(() => {
     const term = normalizeText(search)
@@ -3390,6 +3587,22 @@ function EmployeesPage({ employees, profile, refreshEmployees, registerAudit, se
     setModalMode('create')
   }
 
+
+  function openBulkModal() {
+    setBulkRows([])
+    setBulkFileName('')
+    setBulkResult(null)
+    setSelectedEmployee(null)
+    setLocalError('')
+    setLocalSuccess('')
+
+    if (bulkFileInputRef.current) {
+      bulkFileInputRef.current.value = ''
+    }
+
+    setModalMode('bulk')
+  }
+
   function openEditModal(employee) {
     setForm(normalizeEmployeeForm(employee))
     setSelectedEmployee(employee)
@@ -3411,6 +3624,9 @@ function EmployeesPage({ employees, profile, refreshEmployees, registerAudit, se
     setModalMode(null)
     setSelectedEmployee(null)
     setForm(EMPTY_EMPLOYEE_FORM)
+    setBulkRows([])
+    setBulkFileName('')
+    setBulkResult(null)
     setLocalError('')
     setLocalSuccess('')
   }
@@ -3573,13 +3789,126 @@ function EmployeesPage({ employees, profile, refreshEmployees, registerAudit, se
     }
   }
 
+
+  async function handleBulkFileChange(event) {
+    const file = event.target.files?.[0]
+    setLocalError('')
+    setLocalSuccess('')
+    setBulkResult(null)
+    setBulkRows([])
+
+    if (!file) return
+
+    setBulkFileName(file.name)
+
+    const extension = file.name.split('.').pop()?.toLowerCase()
+
+    if (!['csv', 'txt'].includes(extension)) {
+      setLocalError('No momento o portal importa arquivo CSV. Abra o modelo no Excel/Google Sheets e salve como CSV UTF-8 antes de enviar.')
+      setBulkRows([])
+      setBulkResult(null)
+      return
+    }
+
+    try {
+      const text = await file.text()
+      const rows = parseEmployeesCsv(text)
+      const duplicatedEmails = new Set()
+      const seenEmails = new Set()
+
+      const checkedRows = rows.map(row => {
+        if (seenEmails.has(row.email)) duplicatedEmails.add(row.email)
+        seenEmails.add(row.email)
+        return row
+      }).map(row => {
+        if (duplicatedEmails.has(row.email)) {
+          return {
+            ...row,
+            valid: false,
+            error: row.error ? `${row.error}, e-mail duplicado na planilha` : 'e-mail duplicado na planilha'
+          }
+        }
+        return row
+      })
+
+      setBulkRows(checkedRows)
+
+      const invalidCount = checkedRows.filter(row => !row.valid).length
+      if (invalidCount > 0) {
+        setLocalError(`${invalidCount} linha(s) precisam de correção antes da importação.`)
+      } else {
+        setLocalSuccess(`${checkedRows.length} funcionário(s) prontos para importar.`)
+      }
+    } catch (error) {
+      setLocalError(error?.message || 'Erro ao ler planilha.')
+    }
+  }
+
+  async function handleBulkImport() {
+    const validRows = bulkRows.filter(row => row.valid)
+
+    if (validRows.length === 0) {
+      setLocalError('Nenhuma linha válida para importar.')
+      return
+    }
+
+    const ok = window.confirm(`Deseja importar ${validRows.length} funcionário(s)?`)
+    if (!ok) return
+
+    setBulkImporting(true)
+    setLocalError('')
+    setLocalSuccess('')
+    setBulkResult(null)
+
+    const results = []
+
+    try {
+      for (const row of validRows) {
+        try {
+          await invokeAdminUsers('create', {
+            full_name: row.full_name,
+            email: row.email,
+            phone: row.phone,
+            role: row.role,
+            password: row.password,
+            active: row.active
+          })
+
+          results.push({ ...row, status: 'ok', message: 'Importado' })
+        } catch (error) {
+          results.push({ ...row, status: 'error', message: error?.message || 'Erro ao importar' })
+        }
+      }
+
+      const successCount = results.filter(result => result.status === 'ok').length
+      const errorCount = results.length - successCount
+
+      setBulkResult({ successCount, errorCount, rows: results })
+      await refreshEmployees()
+      await registerAudit?.('FUNCIONÁRIOS', `Importação em massa: ${successCount} sucesso(s), ${errorCount} erro(s)`, { total: results.length })
+
+      if (errorCount > 0) {
+        setGlobalError?.(`Importação finalizada com ${errorCount} erro(s). Veja o resultado no modal.`)
+      } else {
+        setGlobalSuccess?.(`${successCount} funcionário(s) importado(s) com sucesso.`)
+      }
+    } finally {
+      setBulkImporting(false)
+    }
+  }
+
   return (
     <>
       <PageHeader
         title="Funcionários"
         subtitle="Cadastre acessos para app do maqueiro, portal enfermagem e portal coordenador"
         profile={profile}
-        right={<button type="button" onClick={openCreateModal}>+ Novo funcionário</button>}
+        right={
+          <div className="employee-header-actions">
+            <button type="button" className="light-button" onClick={openBulkModal}>Importar em massa</button>
+            <button type="button" onClick={openCreateModal}>+ Novo funcionário</button>
+          </div>
+        }
       />
 
       <section className="employee-stats-grid">
@@ -3671,6 +4000,92 @@ function EmployeesPage({ employees, profile, refreshEmployees, registerAudit, se
             showPassword
             showActive
           />
+        </EmployeeModal>
+      )}
+
+
+      {modalMode === 'bulk' && (
+        <EmployeeModal title="Importar funcionários em massa" subtitle="Envie uma planilha CSV com nome, e-mail, telefone, cargo, senha e status" onClose={closeModal}>
+          <div className="employee-form bulk-import-form">
+            {localError && <div className="error no-print">{localError}</div>}
+            {localSuccess && <div className="success no-print">{localSuccess}</div>}
+
+            <div className="employee-warning-box">
+              <strong>Modelo reconhecido pelo MoverCare</strong>
+              <p>Use as colunas: full_name, email, phone, role, password, active. Os cargos aceitos são MAQUEIRO, ENFERMEIRA, COORDENADOR e ADMIN.</p>
+            </div>
+
+            <div className="bulk-import-actions">
+              <button type="button" className="light-button" onClick={downloadEmployeesCsvTemplate}>Baixar modelo CSV</button>
+              <input
+                ref={bulkFileInputRef}
+                className="bulk-hidden-file-input"
+                type="file"
+                accept=".csv,.txt,text/csv"
+                onChange={handleBulkFileChange}
+              />
+
+              <button
+                type="button"
+                className="bulk-file-input"
+                onClick={() => bulkFileInputRef.current?.click()}
+              >
+                {bulkFileName || 'Selecionar planilha CSV'}
+              </button>
+            </div>
+
+            {bulkRows.length > 0 && (
+              <div className="bulk-preview-box">
+                <div className="bulk-preview-head">
+                  <strong>Prévia da importação</strong>
+                  <span>{bulkRows.filter(row => row.valid).length} válidas • {bulkRows.filter(row => !row.valid).length} com erro</span>
+                </div>
+
+                <div className="bulk-preview-table">
+                  <div className="bulk-preview-row bulk-preview-title">
+                    <span>Linha</span>
+                    <span>Nome</span>
+                    <span>E-mail</span>
+                    <span>Cargo</span>
+                    <span>Status</span>
+                  </div>
+
+                  {bulkRows.slice(0, 80).map(row => (
+                    <div key={`${row.line}-${row.email}`} className={`bulk-preview-row ${row.valid ? 'ok' : 'error'}`}>
+                      <span>{row.line}</span>
+                      <span>{row.full_name || '-'}</span>
+                      <span>{row.email || '-'}</span>
+                      <span>{row.role || '-'}</span>
+                      <span>{row.valid ? 'OK' : row.error}</span>
+                    </div>
+                  ))}
+                </div>
+
+                {bulkRows.length > 80 && <small>Mostrando as primeiras 80 linhas.</small>}
+              </div>
+            )}
+
+            {bulkResult && (
+              <div className="bulk-result-box">
+                <strong>Resultado</strong>
+                <p>{bulkResult.successCount} sucesso(s) • {bulkResult.errorCount} erro(s)</p>
+                {bulkResult.errorCount > 0 && (
+                  <div className="bulk-result-errors">
+                    {bulkResult.rows.filter(row => row.status === 'error').slice(0, 20).map(row => (
+                      <small key={`${row.line}-${row.email}-error`}>Linha {row.line}: {row.email} — {row.message}</small>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+
+            <div className="employee-modal-actions">
+              <button type="button" className="light-button" onClick={closeModal} disabled={bulkImporting}>Fechar</button>
+              <button type="button" onClick={handleBulkImport} disabled={bulkImporting || bulkRows.filter(row => row.valid).length === 0}>
+                {bulkImporting ? 'Importando...' : 'Importar funcionários'}
+              </button>
+            </div>
+          </div>
         </EmployeeModal>
       )}
 
