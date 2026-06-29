@@ -53,6 +53,9 @@ export interface TransportCall {
   equipment_confirmed: boolean;
   infection_precaution?: string | null;
   observation?: string | null;
+  cancellation_reason?: string | null;
+  cancelled_at?: string | null;
+  cancelled_by?: string | null;
   accepted_at?: string | null;
   qr_origin_read_at?: string | null;
   qr_destination_read_at?: string | null;

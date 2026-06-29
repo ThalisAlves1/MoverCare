@@ -29,7 +29,7 @@ import {
 
 import { CreateCallScreen } from './CreateCallScreen';
 import { CallsPanel } from './CallsPanel';
-import { createTransportCall, getMyCalls, getSectors, signOut } from '../services/movercareService';
+import { cancelTransportCall, createTransportCall, getMyCalls, getSectors, signOut } from '../services/movercareService';
 import type { CreateCallForm, Profile, Sector, TransportCall } from '../types/movercare';
 import { supabase } from '../lib/supabase';
 import moverCareLogo from '../assets/logo_topo.png';
@@ -744,10 +744,12 @@ function CallDetailPage({
   call,
   onBack,
   onShowList,
+  onCancelCall,
 }: {
   call: TransportCall;
   onBack: () => void;
   onShowList: () => void;
+  onCancelCall: (call: TransportCall) => void;
 }) {
   const typedCall = call as any;
   const originName = typedCall.origin_sector?.name ?? typedCall.originSector?.name ?? 'Origem não informada';
@@ -784,6 +786,13 @@ function CallDetailPage({
             <ClipboardList size={16} />
             Ver lista
           </button>
+
+          {!['CONCLUIDO', 'CANCELADO'].includes(call.status) && (
+            <button type="button" className="nd-danger-outline-button" onClick={() => onCancelCall(call)}>
+              <X size={16} />
+              Cancelar chamado
+            </button>
+          )}
         </div>
       </div>
 
@@ -836,6 +845,12 @@ function CallDetailPage({
               Concluído em: <strong>{completedAt}</strong>
             </p>
           )}
+
+          {call.status === 'CANCELADO' && (
+            <p className="nd-detail-helper danger">
+              Cancelado em: <strong>{typedCall.cancelled_at ? new Date(typedCall.cancelled_at).toLocaleString('pt-BR') : 'Não informado'}</strong>
+            </p>
+          )}
         </article>
 
         <article className="nd-detail-card nd-detail-route-card">
@@ -868,6 +883,12 @@ function CallDetailPage({
           <p className="nd-detail-observation">
             {observation?.trim() || 'Nenhuma observação registrada para este chamado.'}
           </p>
+
+          {call.status === 'CANCELADO' && (
+            <p className="nd-detail-observation danger">
+              <strong>Motivo do cancelamento:</strong> {typedCall.cancellation_reason || 'Motivo não informado.'}
+            </p>
+          )}
         </article>
       </div>
     </section>
@@ -970,6 +991,10 @@ function NursingProfilePage({ profile, sectors }: { profile: Profile; sectors: S
 export function NursingDashboard({ profile, onLogout }: NursingDashboardProps) {
   const [activePage, setActivePage] = useState<NursingPage>('dashboard');
   const [selectedCall, setSelectedCall] = useState<TransportCall | null>(null);
+  const [cancelTargetCall, setCancelTargetCall] = useState<TransportCall | null>(null);
+  const [cancelReason, setCancelReason] = useState('');
+  const [cancelSaving, setCancelSaving] = useState(false);
+  const [cancelError, setCancelError] = useState<string | null>(null);
   const [theme, setTheme] = useState<ThemeMode>('light');
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [sectors, setSectors] = useState<Sector[]>([]);
@@ -993,6 +1018,46 @@ export function NursingDashboard({ profile, onLogout }: NursingDashboardProps) {
   function openCallDetails(call: TransportCall) {
     setSelectedCall(call);
     setActivePage('call-detail');
+  }
+
+  function openCancelCallModal(call: TransportCall) {
+    setCancelTargetCall(call);
+    setCancelReason('');
+    setCancelError(null);
+  }
+
+  function closeCancelCallModal() {
+    if (cancelSaving) return;
+    setCancelTargetCall(null);
+    setCancelReason('');
+    setCancelError(null);
+  }
+
+  async function confirmCancelCall() {
+    if (!cancelTargetCall) return;
+
+    const reason = cancelReason.trim();
+
+    if (reason.length < 5) {
+      setCancelError('Informe um motivo com pelo menos 5 caracteres.');
+      return;
+    }
+
+    setCancelSaving(true);
+    setCancelError(null);
+
+    try {
+      await cancelTransportCall(cancelTargetCall.id, reason);
+      setCancelTargetCall(null);
+      setCancelReason('');
+      setSelectedCall(null);
+      await loadData();
+      setActivePage('calls');
+    } catch (err) {
+      setCancelError(err instanceof Error ? err.message : 'Erro ao cancelar chamado.');
+    } finally {
+      setCancelSaving(false);
+    }
   }
 
   async function loadData() {
@@ -3025,6 +3090,7 @@ export function NursingDashboard({ profile, onLogout }: NursingDashboardProps) {
                     setSelectedCall(null);
                     setActivePage('calls');
                   }}
+                  onCancelCall={openCancelCallModal}
                 />
               ) : (
                 <div className="nd-empty-state">
@@ -3043,6 +3109,41 @@ export function NursingDashboard({ profile, onLogout }: NursingDashboardProps) {
           )}
         </main>
       </div>
+
+      {cancelTargetCall && (
+        <div className="nd-modal-backdrop" role="dialog" aria-modal="true">
+          <div className="nd-cancel-modal">
+            <div className="nd-cancel-modal-header">
+              <div>
+                <span className="nd-page-kicker">Cancelamento</span>
+                <h2>Cancelar chamado #{String(cancelTargetCall.number).padStart(6, '0')}</h2>
+                <p>Informe o motivo. O chamado ficará como cancelado e continuará no histórico.</p>
+              </div>
+              <button type="button" className="nd-icon-button" onClick={closeCancelCallModal} aria-label="Fechar"><X size={18} /></button>
+            </div>
+
+            <label className="nd-cancel-reason">
+              Motivo do cancelamento
+              <textarea
+                rows={4}
+                value={cancelReason}
+                onChange={(event) => setCancelReason(event.target.value)}
+                placeholder="Ex.: exame cancelado, paciente mudou de setor, chamado duplicado..."
+                autoFocus
+              />
+            </label>
+
+            {cancelError && <div className="nd-error-inline">{cancelError}</div>}
+
+            <div className="nd-cancel-actions">
+              <button type="button" className="nd-secondary-button" onClick={closeCancelCallModal} disabled={cancelSaving}>Voltar</button>
+              <button type="button" className="nd-danger-outline-button" onClick={confirmCancelCall} disabled={cancelSaving}>
+                {cancelSaving ? 'Cancelando...' : 'Confirmar cancelamento'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </>
   );
 }

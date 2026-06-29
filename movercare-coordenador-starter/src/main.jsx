@@ -778,7 +778,7 @@ function SectorQrCard({ sector }) {
   )
 }
 
-function CallRows({ calls, maqueiros, selectedMaqueiroByCall, setSelectedMaqueiroByCall, reassignCall, loading, compact, onOpenDetails }) {
+function CallRows({ calls, maqueiros, selectedMaqueiroByCall, setSelectedMaqueiroByCall, reassignCall, loading, compact, onOpenDetails, onCancelCall }) {
   return (
     <div className={`sla-call-list ${compact ? 'compact' : ''}`}>
       {calls.length === 0 && <div className="empty-row">Nenhum chamado encontrado.</div>}
@@ -804,6 +804,11 @@ function CallRows({ calls, maqueiros, selectedMaqueiroByCall, setSelectedMaqueir
                 <button type="button" className="call-details-chip" onClick={() => onOpenDetails?.(call.id)}>
                   Detalhes
                 </button>
+                {!['CONCLUIDO', 'CANCELADO'].includes(call.status) && (
+                  <button type="button" className="call-cancel-chip" onClick={() => onCancelCall?.(call)}>
+                    Cancelar
+                  </button>
+                )}
               </div>
             </div>
 
@@ -917,6 +922,12 @@ function CallRows({ calls, maqueiros, selectedMaqueiroByCall, setSelectedMaqueir
               <button onClick={() => reassignCall(call.id)} disabled={loading || availableMaqueiros.length === 0}>
                 Reatribuir
               </button>
+
+              {!['CONCLUIDO', 'CANCELADO'].includes(call.status) && (
+                <button type="button" className="danger-outline-button" onClick={() => onCancelCall?.(call)} disabled={loading}>
+                  Cancelar
+                </button>
+              )}
             </div>
           </article>
         )
@@ -1317,7 +1328,8 @@ function CallDetailPage({
   loading,
   profile,
   refreshData,
-  onBack
+  onBack,
+  onCancelCall
 }) {
   if (!call) {
     return (
@@ -1356,6 +1368,9 @@ function CallDetailPage({
           <div className="call-detail-header-actions">
             <button type="button" className="light-button" onClick={onBack}>Voltar</button>
             <button type="button" onClick={refreshData} disabled={loading}>Atualizar</button>
+            {call && !['CONCLUIDO', 'CANCELADO'].includes(call.status) && (
+              <button type="button" className="danger-outline-button" onClick={() => onCancelCall?.(call)} disabled={loading}>Cancelar chamado</button>
+            )}
           </div>
         }
       />
@@ -1422,6 +1437,14 @@ function CallDetailPage({
               <div className="call-detail-observation">
                 <small>Observações</small>
                 <p>{call.observation}</p>
+              </div>
+            )}
+
+            {call.status === 'CANCELADO' && (
+              <div className="call-detail-observation danger">
+                <small>Cancelamento</small>
+                <p>{call.cancellation_reason || 'Motivo não informado.'}</p>
+                <small>Cancelado em: {formatDateTime(call.cancelled_at)}</small>
               </div>
             )}
           </section>
@@ -1775,7 +1798,7 @@ function CoordinatorSettingsPage({
 }
 
 function OverviewPage(props) {
-  const { dashboardStats, counters, maqueiros, calls, sectors, coordinatorSettings, registerAudit, onNavigate, openCallDetails, profile, loading, refreshData, selectedMaqueiroByCall, setSelectedMaqueiroByCall, reassignCall } = props
+  const { dashboardStats, counters, maqueiros, calls, sectors, coordinatorSettings, registerAudit, onNavigate, openCallDetails, profile, loading, refreshData, selectedMaqueiroByCall, setSelectedMaqueiroByCall, reassignCall, cancelCall } = props
   const [operationMonth, setOperationMonth] = useState(getCurrentMonthValue())
   const operationMonthLabel = getMonthLabel(operationMonth)
 
@@ -2039,6 +2062,7 @@ function OverviewPage(props) {
               loading={loading}
               compact
               onOpenDetails={openCallDetails}
+              onCancelCall={cancelCall}
             />
 
             <div className="table-footer">
@@ -2095,7 +2119,8 @@ function CallsPage({
   loading,
   profile,
   refreshData,
-  openCallDetails
+  openCallDetails,
+  cancelCall
 }) {
   const [searchTerm, setSearchTerm] = useState('')
   const [priorityFilter, setPriorityFilter] = useState('TODOS')
@@ -2238,6 +2263,7 @@ function CallsPage({
           reassignCall={reassignCall}
           loading={loading}
           onOpenDetails={openCallDetails}
+          onCancelCall={cancelCall}
         />
       </section>
     </>
@@ -4357,6 +4383,10 @@ function App() {
   const [profile, setProfile] = useState(null)
   const [activePage, setActivePage] = useState('overview')
   const [selectedCallId, setSelectedCallId] = useState(null)
+  const [cancelTargetCall, setCancelTargetCall] = useState(null)
+  const [cancelReason, setCancelReason] = useState('')
+  const [cancelSaving, setCancelSaving] = useState(false)
+  const [cancelError, setCancelError] = useState('')
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
   const [panelTheme, setPanelTheme] = useState('light')
   const [checking, setChecking] = useState(true)
@@ -4482,6 +4512,9 @@ function App() {
         qr_origin_read_at,
         qr_destination_read_at,
         completed_at,
+        cancellation_reason,
+        cancelled_at,
+        cancelled_by,
         timeout_count,
         origin:origin_sector_id(id, name, qr_token),
         destination:destination_sector_id(id, name, qr_token),
@@ -4833,6 +4866,57 @@ function App() {
     setLoading(false)
   }
 
+  function openCancelCallModal(call) {
+    setCancelTargetCall(call)
+    setCancelReason('')
+    setCancelError('')
+  }
+
+  function closeCancelCallModal() {
+    if (cancelSaving) return
+    setCancelTargetCall(null)
+    setCancelReason('')
+    setCancelError('')
+  }
+
+  async function confirmCancelCall() {
+    if (!cancelTargetCall?.id) return
+
+    const reason = cancelReason.trim()
+
+    if (reason.length < 5) {
+      setCancelError('Informe um motivo com pelo menos 5 caracteres.')
+      return
+    }
+
+    setCancelSaving(true)
+    setCancelError('')
+    setError('')
+
+    const { error: rpcError } = await supabase.rpc('cancel_transport_call', {
+      p_call_id: cancelTargetCall.id,
+      p_reason: reason
+    })
+
+    if (rpcError) {
+      setCancelError(rpcError.message)
+      setCancelSaving(false)
+      return
+    }
+
+    await registerAudit('CANCELAMENTO', `Cancelou chamado #${cancelTargetCall.number || cancelTargetCall.id}`, {
+      callId: cancelTargetCall.id,
+      reason
+    })
+
+    setSuccess('Chamado cancelado com sucesso.')
+    window.setTimeout(() => setSuccess(''), 2600)
+    setCancelTargetCall(null)
+    setCancelReason('')
+    await refreshData()
+    setCancelSaving(false)
+  }
+
   function openCallDetails(callId) {
     setSelectedCallId(callId)
     setActivePage('call-detail')
@@ -5084,6 +5168,7 @@ function App() {
               selectedMaqueiroByCall={selectedMaqueiroByCall}
               setSelectedMaqueiroByCall={setSelectedMaqueiroByCall}
               reassignCall={reassignCall}
+              cancelCall={openCancelCallModal}
             />
           )}
 
@@ -5101,6 +5186,7 @@ function App() {
               profile={profile}
               refreshData={refreshData}
               openCallDetails={openCallDetails}
+              cancelCall={openCancelCallModal}
             />
           )}
 
@@ -5115,6 +5201,7 @@ function App() {
               profile={profile}
               refreshData={refreshData}
               onBack={() => setActivePage('calls')}
+              onCancelCall={openCancelCallModal}
             />
           )}
 
@@ -5194,6 +5281,47 @@ function App() {
             <ProfilePage profile={profile} sectors={sectors} />
           )}
         </section>
+
+        {cancelTargetCall && (
+          <div className="call-cancel-modal-backdrop no-print" role="dialog" aria-modal="true">
+            <div className="call-cancel-modal">
+              <div className="call-cancel-modal-header">
+                <div>
+                  <span className="section-kicker">Cancelamento de chamado</span>
+                  <h2>Cancelar chamado #{cancelTargetCall.number || '-'}</h2>
+                  <p>Informe o motivo. O chamado ficará como CANCELADO e continuará no histórico.</p>
+                </div>
+                <button type="button" className="call-modal-close" onClick={closeCancelCallModal} aria-label="Fechar cancelamento">×</button>
+              </div>
+
+              <div className="cancel-call-summary">
+                <div><small>Paciente</small><strong>{cancelTargetCall.patient_code || 'Não informado'}</strong></div>
+                <div><small>Rota</small><strong>{cancelTargetCall.origin?.name || '-'} → {cancelTargetCall.destination?.name || '-'}</strong></div>
+                <div><small>Status atual</small><strong>{formatValue(cancelTargetCall.status)}</strong></div>
+              </div>
+
+              <label className="cancel-reason-field">
+                Motivo do cancelamento
+                <textarea
+                  rows={4}
+                  value={cancelReason}
+                  onChange={(event) => setCancelReason(event.target.value)}
+                  placeholder="Ex.: paciente não está mais no setor, exame cancelado, transporte duplicado..."
+                  autoFocus
+                />
+              </label>
+
+              {cancelError && <div className="error">{cancelError}</div>}
+
+              <div className="call-cancel-modal-actions">
+                <button type="button" className="light-button" onClick={closeCancelCallModal} disabled={cancelSaving}>Voltar</button>
+                <button type="button" className="danger-button" onClick={confirmCancelCall} disabled={cancelSaving}>
+                  {cancelSaving ? 'Cancelando...' : 'Confirmar cancelamento'}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </main>
     </div>
   )
