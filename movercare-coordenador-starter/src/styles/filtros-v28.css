@@ -1,0 +1,44 @@
+
+/* v28 - Correção de filtros */
+.filters-working-row {
+  display: grid;
+  grid-template-columns: minmax(240px, 1.4fr) repeat(4, minmax(150px, 1fr)) auto;
+  gap: 10px;
+  align-items: center;
+  margin: 14px 0 18px;
+}
+
+.filters-working-row input,
+.filters-working-row select {
+  min-height: 42px;
+  border: 1px solid rgba(12, 73, 84, 0.14);
+  border-radius: 14px;
+  padding: 0 12px;
+  background: #ffffff;
+  color: #102033;
+  outline: none;
+}
+
+.filters-working-row input:focus,
+.filters-working-row select:focus {
+  border-color: #0a9aa4;
+  box-shadow: 0 0 0 4px rgba(10, 154, 164, 0.10);
+}
+
+.filter-button.active {
+  background: #e7f8f8;
+  color: #08747c;
+  border-color: rgba(10, 154, 164, 0.22);
+}
+
+@media (max-width: 1100px) {
+  .filters-working-row {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+@media (max-width: 700px) {
+  .filters-working-row {
+    grid-template-columns: 1fr;
+  }
+}

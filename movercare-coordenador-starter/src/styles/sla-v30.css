@@ -1,0 +1,157 @@
+
+/* v30 - SLA e informações completas dos chamados */
+.sla-summary-row {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(150px, 1fr));
+  gap: 12px;
+  margin: 14px 0 18px;
+}
+
+.sla-call-list {
+  display: grid;
+  gap: 14px;
+}
+
+.sla-call-card {
+  background: #ffffff;
+  border: 1px solid rgba(12, 73, 84, 0.12);
+  border-radius: 22px;
+  box-shadow: 0 14px 34px rgba(12, 73, 84, 0.07);
+  padding: 16px;
+}
+
+.sla-call-head,
+.sla-action-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.sla-call-head strong {
+  display: block;
+  color: #102033;
+  font-size: 18px;
+}
+
+.sla-call-head span {
+  color: #667085;
+  font-size: 13px;
+}
+
+.sla-call-badges {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+.sla-call-grid,
+.sla-time-grid {
+  display: grid;
+  gap: 10px;
+  margin-top: 14px;
+}
+
+.sla-call-grid {
+  grid-template-columns: repeat(4, minmax(140px, 1fr));
+}
+
+.sla-time-grid {
+  grid-template-columns: repeat(5, minmax(120px, 1fr));
+}
+
+.sla-call-grid > div,
+.sla-time-grid > div,
+.sla-observation {
+  background: #f7fafb;
+  border: 1px solid #e1e9ec;
+  border-radius: 15px;
+  padding: 12px;
+}
+
+.sla-call-grid small,
+.sla-time-grid small,
+.sla-observation small {
+  display: block;
+  color: #667085;
+  font-size: 11px;
+  font-weight: 700;
+  margin-bottom: 5px;
+}
+
+.sla-call-grid strong,
+.sla-time-grid strong {
+  display: block;
+  color: #102033;
+  font-size: 13px;
+  word-break: break-word;
+}
+
+.sla-observation {
+  margin-top: 12px;
+}
+
+.sla-observation p {
+  margin: 0;
+  color: #102033;
+  font-size: 13px;
+}
+
+.sla-action-row {
+  margin-top: 14px;
+  border-top: 1px solid #e1e9ec;
+  padding-top: 14px;
+}
+
+.sla-action-row select {
+  min-height: 40px;
+  border: 1px solid rgba(12, 73, 84, 0.14);
+  border-radius: 12px;
+  padding: 0 12px;
+  background: #ffffff;
+  color: #102033;
+}
+
+.sla-action-row button {
+  min-height: 40px;
+  border: 0;
+  border-radius: 12px;
+  background: #0a9aa4;
+  color: #ffffff;
+  padding: 0 14px;
+  font-weight: 800;
+}
+
+.sla-action-row button:disabled {
+  background: #cbd5df;
+  cursor: not-allowed;
+}
+
+@media (max-width: 1100px) {
+  .sla-summary-row,
+  .sla-call-grid,
+  .sla-time-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 700px) {
+  .sla-summary-row,
+  .sla-call-grid,
+  .sla-time-grid,
+  .sla-action-row {
+    grid-template-columns: 1fr;
+  }
+
+  .sla-call-head,
+  .sla-action-row {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .sla-call-badges {
+    justify-content: flex-start;
+  }
+}

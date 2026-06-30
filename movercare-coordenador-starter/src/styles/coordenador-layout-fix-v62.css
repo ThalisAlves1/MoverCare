@@ -1,0 +1,74 @@
+
+/* v62 - Complemento de layout Coordenador: tokens, filtros, proporções finais */
+.token-field {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 44px;
+  padding: 8px 10px;
+  border: 1px solid rgba(12, 73, 84, 0.14);
+  border-radius: 14px;
+  background: #ffffff;
+}
+
+.token-text {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: #334155;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.filters-working-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin: 12px 0;
+}
+
+.filters-working-row > * {
+  min-height: 38px;
+}
+
+.app-shell {
+  min-height: 100vh;
+}
+
+.content {
+  min-width: 0;
+}
+
+.panel {
+  min-width: 0;
+}
+
+.table-panel,
+.new-call-panel,
+.sector-map-main-panel,
+.sector-map-detail-panel {
+  width: 100%;
+  max-width: 100%;
+}
+
+.sla-call-list {
+  display: grid;
+  gap: 14px;
+}
+
+@media (max-width: 980px) {
+  .app-shell {
+    grid-template-columns: 1fr !important;
+  }
+
+  .sidebar {
+    display: none !important;
+  }
+
+  .content {
+    padding: 16px !important;
+  }
+}

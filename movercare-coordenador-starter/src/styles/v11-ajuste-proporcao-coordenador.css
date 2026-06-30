@@ -1,0 +1,652 @@
+
+/* v11 - Ajuste final de proporção do Painel Coordenador
+   Resolve tela desconfigurada, excesso de espaço e cards/tabelas grandes.
+*/
+
+/* Escala geral */
+:root {
+  --coord-sidebar: 232px;
+  --coord-page-x: 22px;
+  --coord-page-y: 20px;
+  --coord-radius: 12px;
+  --coord-border: #e5edf3;
+  --coord-teal: #00898b;
+  --coord-muted: #64748b;
+}
+
+/* Estrutura principal */
+.app-shell {
+  grid-template-columns: var(--coord-sidebar) minmax(0, 1fr) !important;
+  background: #f8fafc !important;
+}
+
+.sidebar {
+  padding: 24px 14px 20px !important;
+}
+
+.sidebar .brand-logo {
+  margin-bottom: 26px !important;
+}
+
+.sidebar .brand-logo strong {
+  font-size: 22px !important;
+}
+
+.sidebar .logo-cross {
+  width: 36px !important;
+  height: 36px !important;
+}
+
+.sidebar .logo-cross span:first-child {
+  width: 36px !important;
+  height: 13px !important;
+  top: 12px !important;
+}
+
+.sidebar .logo-cross span:last-child {
+  width: 13px !important;
+  height: 36px !important;
+  left: 12px !important;
+}
+
+.sidebar .logo-cross::after {
+  width: 11px !important;
+  height: 11px !important;
+}
+
+.sidebar-nav {
+  gap: 7px !important;
+}
+
+.sidebar-nav button {
+  height: 46px !important;
+  padding: 0 16px !important;
+  font-size: 14px !important;
+  gap: 12px !important;
+  border-radius: 9px !important;
+}
+
+.sidebar-nav button span {
+  width: 21px !important;
+  font-size: 15px !important;
+}
+
+.sidebar-bottom {
+  min-height: 95px !important;
+  font-size: 11px !important;
+}
+
+.sidebar-bottom strong {
+  max-width: 138px !important;
+}
+
+.watermark-cross {
+  font-size: 112px !important;
+  bottom: -22px !important;
+}
+
+/* Header */
+.content-header {
+  min-height: 62px !important;
+  padding: 14px 24px !important;
+}
+
+.content-header h1 {
+  font-size: 19px !important;
+  letter-spacing: -0.02em !important;
+}
+
+.content-header p {
+  font-size: 13px !important;
+  margin-top: 4px !important;
+}
+
+.header-right {
+  gap: 12px !important;
+  flex-wrap: wrap !important;
+}
+
+.user-avatar,
+.mini-avatar,
+.avatar {
+  width: 34px !important;
+  height: 34px !important;
+  font-size: 13px !important;
+}
+
+.user-chip {
+  gap: 10px !important;
+}
+
+.user-chip strong {
+  font-size: 13px !important;
+}
+
+.user-chip span {
+  font-size: 12px !important;
+}
+
+.live-update {
+  gap: 8px !important;
+  font-size: 12px !important;
+}
+
+.live-update b {
+  padding: 5px 8px !important;
+}
+
+.live-update button {
+  width: 34px !important;
+  height: 34px !important;
+}
+
+/* Página */
+.page {
+  padding: var(--coord-page-y) var(--coord-page-x) 24px !important;
+}
+
+/* Métricas: evita cards enormes ou apertados */
+.metrics-row {
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)) !important;
+  gap: 12px !important;
+  margin-bottom: 18px !important;
+}
+
+.metric-card {
+  min-height: 102px !important;
+  padding: 16px !important;
+  border-radius: var(--coord-radius) !important;
+}
+
+.metric-card span {
+  font-size: 12px !important;
+  margin-top: 2px !important;
+}
+
+.metric-card strong {
+  font-size: 27px !important;
+  margin-top: 14px !important;
+  letter-spacing: -0.04em !important;
+}
+
+.metric-card small {
+  font-size: 12px !important;
+}
+
+.metric-icon {
+  width: 36px !important;
+  height: 36px !important;
+  top: 14px !important;
+  right: 14px !important;
+}
+
+/* Dashboard */
+.dashboard-grid {
+  grid-template-columns: minmax(0, 1fr) 360px !important;
+  gap: 16px !important;
+  align-items: start !important;
+}
+
+.panel {
+  border-radius: var(--coord-radius) !important;
+}
+
+.panel-title-row {
+  padding: 16px 16px 12px !important;
+  gap: 12px !important;
+}
+
+.panel-title-row h2 {
+  font-size: 16px !important;
+}
+
+.count-badge,
+.side-panel h3 span {
+  font-size: 11px !important;
+  padding: 3px 7px !important;
+}
+
+.filter-row {
+  gap: 8px !important;
+}
+
+.filter-row select {
+  min-width: 130px !important;
+  height: 36px !important;
+  font-size: 12px !important;
+}
+
+/* Tabelas proporcionais */
+.table-panel {
+  overflow-x: auto !important;
+}
+
+.data-table {
+  min-width: 900px !important;
+}
+
+.data-head,
+.data-row {
+  grid-template-columns: 78px 125px 125px 145px 112px 128px 78px minmax(165px, 1fr) !important;
+  gap: 9px !important;
+}
+
+.data-head {
+  padding: 10px 14px !important;
+  font-size: 11px !important;
+}
+
+.data-row {
+  padding: 12px 14px !important;
+  font-size: 12px !important;
+}
+
+.data-row strong {
+  font-size: 12px !important;
+}
+
+.status-pill,
+.soft-pill {
+  min-height: 24px !important;
+  padding: 4px 8px !important;
+  font-size: 11px !important;
+  border-radius: 7px !important;
+}
+
+.action-cell {
+  grid-template-columns: 1fr 34px !important;
+  gap: 6px !important;
+}
+
+.action-cell button {
+  min-height: 32px !important;
+  font-size: 11px !important;
+}
+
+.table-footer {
+  padding: 12px 14px !important;
+  font-size: 12px !important;
+}
+
+.table-footer button,
+.full-link {
+  min-height: 36px !important;
+  font-size: 12px !important;
+}
+
+/* Cards rápidos */
+.quick-card-row {
+  gap: 12px !important;
+  margin-top: 14px !important;
+}
+
+.quick-card-row button {
+  min-height: 62px !important;
+  padding: 14px 16px !important;
+  font-size: 13px !important;
+}
+
+.quick-card-row small {
+  font-size: 12px !important;
+}
+
+/* Lateral direita */
+.right-column {
+  gap: 14px !important;
+}
+
+.side-panel {
+  padding: 15px !important;
+}
+
+.side-panel h3 {
+  font-size: 15px !important;
+  margin-bottom: 12px !important;
+}
+
+.alert-item {
+  grid-template-columns: 22px 1fr auto !important;
+  gap: 10px !important;
+  padding: 10px 0 !important;
+}
+
+.alert-item strong {
+  font-size: 12px !important;
+}
+
+.alert-item p,
+.alert-item small {
+  font-size: 12px !important;
+}
+
+.alert-icon {
+  width: 18px !important;
+  height: 18px !important;
+}
+
+.team-mini-table > div {
+  grid-template-columns: 30px 1fr 95px auto !important;
+  gap: 8px !important;
+  padding: 8px 0 !important;
+}
+
+.team-mini-table strong {
+  font-size: 12px !important;
+}
+
+.team-mini-table small {
+  font-size: 11px !important;
+}
+
+.sector-map {
+  height: 160px !important;
+  background-size: 28px 28px !important;
+  padding: 12px !important;
+}
+
+.sector-map div {
+  padding: 8px 10px !important;
+  font-size: 11px !important;
+  border-radius: 7px !important;
+}
+
+.sector-map div:nth-child(1) { left: 42px !important; top: 26px !important; }
+.sector-map div:nth-child(2) { right: 34px !important; top: 28px !important; }
+.sector-map div:nth-child(3) { left: 16px !important; bottom: 22px !important; }
+.sector-map div:nth-child(4) { right: 58px !important; bottom: 18px !important; }
+
+/* Outras páginas: Maqueiros, Setores e QR Codes */
+.team-head,
+.team-row,
+.sector-head,
+.sector-row {
+  gap: 9px !important;
+}
+
+.team-head,
+.sector-head {
+  padding: 11px 14px !important;
+  font-size: 11px !important;
+}
+
+.team-row,
+.sector-row {
+  padding: 12px 14px !important;
+  font-size: 12px !important;
+}
+
+.team-head,
+.team-row {
+  grid-template-columns: 1.3fr .9fr 120px 104px !important;
+}
+
+.sector-head,
+.sector-row {
+  grid-template-columns: 1.05fr 64px 1.25fr 90px 245px !important;
+}
+
+.person-cell {
+  gap: 10px !important;
+}
+
+.person-cell small,
+.sector-row small {
+  font-size: 11px !important;
+}
+
+.form-panel {
+  padding: 15px !important;
+  margin-bottom: 14px !important;
+}
+
+.sector-form {
+  grid-template-columns: minmax(180px, 1fr) 90px minmax(220px, 1.15fr) auto auto !important;
+  gap: 10px !important;
+}
+
+.form-actions,
+.sector-actions {
+  gap: 6px !important;
+}
+
+button.small {
+  padding: 7px 9px !important;
+  font-size: 11px !important;
+}
+
+.token-text {
+  font-size: 11px !important;
+}
+
+.qr-grid {
+  grid-template-columns: repeat(auto-fill, minmax(245px, 1fr)) !important;
+  gap: 14px !important;
+}
+
+.qr-card {
+  padding: 14px !important;
+  border-radius: 11px !important;
+}
+
+.qr-card h3 {
+  font-size: 15px !important;
+}
+
+.qr-card p {
+  font-size: 12px !important;
+}
+
+.qr-frame {
+  min-height: 200px !important;
+}
+
+.qr-frame img {
+  max-width: 185px !important;
+}
+
+.qr-info span {
+  font-size: 10px !important;
+}
+
+.qr-info strong {
+  font-size: 12px !important;
+}
+
+/* Inputs e botões */
+input,
+select {
+  min-height: 36px !important;
+  padding: 8px 10px !important;
+  font-size: 12px !important;
+}
+
+label {
+  margin: 8px 0 5px !important;
+  font-size: 12px !important;
+}
+
+button {
+  min-height: 36px !important;
+  padding: 8px 12px !important;
+  font-size: 12px !important;
+}
+
+/* Login não fica gigante */
+.login-header {
+  height: 92px !important;
+  padding: 0 46px !important;
+}
+
+.login-main {
+  gap: 42px !important;
+  padding: 42px 72px 28px !important;
+}
+
+.login-hero h1 {
+  font-size: clamp(34px, 3.8vw, 54px) !important;
+}
+
+.login-hero p {
+  font-size: 16px !important;
+}
+
+.login-card {
+  padding: 34px 40px !important;
+  border-radius: 18px !important;
+}
+
+.login-card h2 {
+  font-size: 26px !important;
+}
+
+/* Responsividade */
+@media (max-width: 1500px) {
+  .dashboard-grid {
+    grid-template-columns: minmax(0, 1fr) 330px !important;
+  }
+
+  .metrics-row {
+    grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+  }
+}
+
+@media (max-width: 1220px) {
+  .dashboard-grid {
+    grid-template-columns: 1fr !important;
+  }
+
+  .right-column {
+    grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+  }
+
+  .team-mini-table > div {
+    grid-template-columns: 30px 1fr !important;
+  }
+
+  .team-mini-table > div > span,
+  .team-mini-table > div > button {
+    grid-column: 2 !important;
+  }
+}
+
+@media (max-width: 1050px) {
+  .app-shell {
+    grid-template-columns: 1fr !important;
+  }
+
+  .sidebar {
+    display: none !important;
+  }
+
+  .mobile-brand,
+  .mobile-tabs {
+    display: flex !important;
+  }
+
+  .content-header {
+    flex-direction: column !important;
+    align-items: flex-start !important;
+    gap: 12px !important;
+  }
+
+  .header-right {
+    width: 100% !important;
+    justify-content: space-between !important;
+  }
+
+  .page {
+    padding: 16px !important;
+  }
+
+  .metrics-row {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  }
+
+  .right-column {
+    grid-template-columns: 1fr !important;
+  }
+
+  .quick-card-row {
+    grid-template-columns: 1fr !important;
+  }
+
+  .sector-form {
+    grid-template-columns: 1fr 1fr !important;
+  }
+
+  .sector-form > * {
+    min-width: 0 !important;
+  }
+}
+
+@media (max-width: 720px) {
+  .page {
+    padding: 12px !important;
+  }
+
+  .metrics-row {
+    grid-template-columns: 1fr !important;
+  }
+
+  .metric-card {
+    min-height: 88px !important;
+  }
+
+  .panel-title-row,
+  .table-footer,
+  .sector-form {
+    grid-template-columns: 1fr !important;
+    flex-direction: column !important;
+    align-items: stretch !important;
+  }
+
+  .filter-row,
+  .form-actions,
+  .sector-actions {
+    width: 100% !important;
+    flex-direction: column !important;
+  }
+
+  .filter-row select,
+  .filter-row button,
+  .form-actions button,
+  .sector-actions button {
+    width: 100% !important;
+  }
+
+  .login-header {
+    height: auto !important;
+    padding: 18px !important;
+  }
+
+  .login-main {
+    grid-template-columns: 1fr !important;
+    padding: 22px 16px !important;
+  }
+
+  .login-hero {
+    display: none !important;
+  }
+
+  .login-card {
+    padding: 26px 18px !important;
+  }
+}
+
+/* Impressão continua limpa */
+@media print {
+  .sidebar,
+  .content-header .header-right,
+  .mobile-brand,
+  .mobile-tabs {
+    display: none !important;
+  }
+
+  .app-shell {
+    display: block !important;
+  }
+
+  .page {
+    padding: 0 !important;
+  }
+}

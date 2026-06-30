@@ -11,7 +11,8 @@
     "react-dom": "latest",
     "@supabase/supabase-js": "latest",
     "lucide-react": "latest",
-    "qrcode": "latest"
+    "qrcode": "latest",
+    "jspdf": "^2.5.2"
   },
   "devDependencies": {},
   "name": "movercare-coordenador",
