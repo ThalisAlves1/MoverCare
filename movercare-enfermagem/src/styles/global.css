@@ -2853,3 +2853,111 @@ textarea {
     grid-template-columns: 1fr;
   }
 }
+
+/* Cancelamento de chamados */
+.danger-outline-button,
+.row-cancel-button,
+.nd-danger-outline-button {
+  border: 1px solid rgba(220, 38, 38, 0.28);
+  background: rgba(254, 242, 242, 0.98);
+  color: #b91c1c;
+  border-radius: 999px;
+  padding: 9px 13px;
+  font-weight: 900;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  cursor: pointer;
+}
+
+.danger-outline-button:hover,
+.row-cancel-button:hover,
+.nd-danger-outline-button:hover {
+  background: #fee2e2;
+  transform: translateY(-1px);
+}
+
+.row-cancel-button {
+  padding: 7px 10px;
+  font-size: 12px;
+}
+
+.cancel-call-modal .cancel-reason-field,
+.nd-cancel-reason {
+  display: grid;
+  gap: 8px;
+  margin-top: 14px;
+  color: #64748b;
+  font-size: 12px;
+  font-weight: 900;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.cancel-call-modal textarea,
+.nd-cancel-reason textarea {
+  width: 100%;
+  min-height: 116px;
+  resize: vertical;
+  border: 1px solid #dce8ef;
+  border-radius: 18px;
+  padding: 14px;
+  font: inherit;
+  color: #102033;
+  background: #ffffff;
+  outline: none;
+}
+
+.cancel-call-modal textarea:focus,
+.nd-cancel-reason textarea:focus {
+  border-color: #dc2626;
+  box-shadow: 0 0 0 4px rgba(220, 38, 38, 0.1);
+}
+
+.nd-cancel-modal {
+  width: min(640px, 100%);
+  max-height: calc(100vh - 44px);
+  overflow: auto;
+  border-radius: 28px;
+  background: var(--nd-surface, #ffffff);
+  border: 1px solid var(--nd-border, #dce8ef);
+  box-shadow: 0 28px 80px rgba(6, 43, 88, 0.25);
+  padding: 24px;
+}
+
+.nd-cancel-modal-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 18px;
+  margin-bottom: 18px;
+}
+
+.nd-cancel-modal-header h2 {
+  margin: 4px 0 6px;
+  color: var(--nd-title, #062b58);
+}
+
+.nd-cancel-modal-header p {
+  margin: 0;
+  color: var(--nd-muted, #64748b);
+}
+
+.nd-cancel-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 18px;
+  flex-wrap: wrap;
+}
+
+.nd-error-inline,
+.nd-detail-helper.danger,
+.nd-detail-observation.danger {
+  border: 1px solid rgba(220, 38, 38, 0.22);
+  background: rgba(254, 242, 242, 0.9);
+  color: #b91c1c;
+  border-radius: 16px;
+  padding: 12px;
+}

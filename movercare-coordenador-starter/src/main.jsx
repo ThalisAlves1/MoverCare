@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react'
+import React, { useEffect, useMemo, useRef, useState } from 'react'
 import { createRoot } from 'react-dom/client'
 import QRCode from 'qrcode'
 import jsPDF from 'jspdf'
@@ -42,7 +42,10 @@ const PAGES = [
   { id: 'calls', label: 'Chamados', mark: <ClipboardList size={24} /> },
   { id: 'newcall', label: 'Novo Chamado', mark: <SquarePlus size={24} /> },
   { id: 'maqueiros', label: 'Maqueiros', mark: <Accessibility size={24} /> },
+<<<<<<< HEAD
   { id: 'schedule', label: 'Escala', mark: <FileClock size={24} /> },
+=======
+>>>>>>> 437ef73afeb0fe058c7b6523e68a4e3e147f3df4
   { id: 'employees', label: 'Funcionários', mark: <UsersRound size={24} /> },
   { id: 'map', label: 'Mapa', mark: <LocateFixed size={24} /> },
   { id: 'sectors', label: 'Setores', mark: '▦' },
@@ -779,7 +782,11 @@ function SectorQrCard({ sector }) {
   )
 }
 
+<<<<<<< HEAD
 function CallRows({ calls, maqueiros, selectedMaqueiroByCall, setSelectedMaqueiroByCall, reassignCall, loading, compact, onOpenDetails }) {
+=======
+function CallRows({ calls, maqueiros, selectedMaqueiroByCall, setSelectedMaqueiroByCall, reassignCall, loading, compact, onOpenDetails, onCancelCall }) {
+>>>>>>> 437ef73afeb0fe058c7b6523e68a4e3e147f3df4
   return (
     <div className={`sla-call-list ${compact ? 'compact' : ''}`}>
       {calls.length === 0 && <div className="empty-row">Nenhum chamado encontrado.</div>}
@@ -805,6 +812,14 @@ function CallRows({ calls, maqueiros, selectedMaqueiroByCall, setSelectedMaqueir
                 <button type="button" className="call-details-chip" onClick={() => onOpenDetails?.(call.id)}>
                   Detalhes
                 </button>
+<<<<<<< HEAD
+=======
+                {!['CONCLUIDO', 'CANCELADO'].includes(call.status) && (
+                  <button type="button" className="call-cancel-chip" onClick={() => onCancelCall?.(call)}>
+                    Cancelar
+                  </button>
+                )}
+>>>>>>> 437ef73afeb0fe058c7b6523e68a4e3e147f3df4
               </div>
             </div>
 
@@ -918,6 +933,12 @@ function CallRows({ calls, maqueiros, selectedMaqueiroByCall, setSelectedMaqueir
               <button onClick={() => reassignCall(call.id)} disabled={loading || availableMaqueiros.length === 0}>
                 Reatribuir
               </button>
+
+              {!['CONCLUIDO', 'CANCELADO'].includes(call.status) && (
+                <button type="button" className="danger-outline-button" onClick={() => onCancelCall?.(call)} disabled={loading}>
+                  Cancelar
+                </button>
+              )}
             </div>
           </article>
         )
@@ -1318,7 +1339,12 @@ function CallDetailPage({
   loading,
   profile,
   refreshData,
+<<<<<<< HEAD
   onBack
+=======
+  onBack,
+  onCancelCall
+>>>>>>> 437ef73afeb0fe058c7b6523e68a4e3e147f3df4
 }) {
   if (!call) {
     return (
@@ -1357,6 +1383,12 @@ function CallDetailPage({
           <div className="call-detail-header-actions">
             <button type="button" className="light-button" onClick={onBack}>Voltar</button>
             <button type="button" onClick={refreshData} disabled={loading}>Atualizar</button>
+<<<<<<< HEAD
+=======
+            {call && !['CONCLUIDO', 'CANCELADO'].includes(call.status) && (
+              <button type="button" className="danger-outline-button" onClick={() => onCancelCall?.(call)} disabled={loading}>Cancelar chamado</button>
+            )}
+>>>>>>> 437ef73afeb0fe058c7b6523e68a4e3e147f3df4
           </div>
         }
       />
@@ -1425,6 +1457,17 @@ function CallDetailPage({
                 <p>{call.observation}</p>
               </div>
             )}
+<<<<<<< HEAD
+=======
+
+            {call.status === 'CANCELADO' && (
+              <div className="call-detail-observation danger">
+                <small>Cancelamento</small>
+                <p>{call.cancellation_reason || 'Motivo não informado.'}</p>
+                <small>Cancelado em: {formatDateTime(call.cancelled_at)}</small>
+              </div>
+            )}
+>>>>>>> 437ef73afeb0fe058c7b6523e68a4e3e147f3df4
           </section>
         </div>
 
@@ -1776,7 +1819,11 @@ function CoordinatorSettingsPage({
 }
 
 function OverviewPage(props) {
+<<<<<<< HEAD
   const { dashboardStats, counters, maqueiros, calls, sectors, coordinatorSettings, registerAudit, onNavigate, openCallDetails, profile, loading, refreshData, selectedMaqueiroByCall, setSelectedMaqueiroByCall, reassignCall } = props
+=======
+  const { dashboardStats, counters, maqueiros, calls, sectors, coordinatorSettings, registerAudit, onNavigate, openCallDetails, profile, loading, refreshData, selectedMaqueiroByCall, setSelectedMaqueiroByCall, reassignCall, cancelCall } = props
+>>>>>>> 437ef73afeb0fe058c7b6523e68a4e3e147f3df4
   const [operationMonth, setOperationMonth] = useState(getCurrentMonthValue())
   const operationMonthLabel = getMonthLabel(operationMonth)
 
@@ -2040,6 +2087,10 @@ function OverviewPage(props) {
               loading={loading}
               compact
               onOpenDetails={openCallDetails}
+<<<<<<< HEAD
+=======
+              onCancelCall={cancelCall}
+>>>>>>> 437ef73afeb0fe058c7b6523e68a4e3e147f3df4
             />
 
             <div className="table-footer">
@@ -2096,7 +2147,12 @@ function CallsPage({
   loading,
   profile,
   refreshData,
+<<<<<<< HEAD
   openCallDetails
+=======
+  openCallDetails,
+  cancelCall
+>>>>>>> 437ef73afeb0fe058c7b6523e68a4e3e147f3df4
 }) {
   const [searchTerm, setSearchTerm] = useState('')
   const [priorityFilter, setPriorityFilter] = useState('TODOS')
@@ -2239,6 +2295,10 @@ function CallsPage({
           reassignCall={reassignCall}
           loading={loading}
           onOpenDetails={openCallDetails}
+<<<<<<< HEAD
+=======
+          onCancelCall={cancelCall}
+>>>>>>> 437ef73afeb0fe058c7b6523e68a4e3e147f3df4
         />
       </section>
     </>
@@ -3010,6 +3070,10 @@ function NewCallPage({ sectors, profile, onCreated, onNavigate }) {
   const [savingCall, setSavingCall] = useState(false)
   const [localError, setLocalError] = useState('')
   const [localSuccess, setLocalSuccess] = useState('')
+  const [bulkRows, setBulkRows] = useState([])
+  const [bulkFileName, setBulkFileName] = useState('')
+  const [bulkImporting, setBulkImporting] = useState(false)
+  const [bulkResult, setBulkResult] = useState(null)
 
   useEffect(() => {
     setForm(prev => ({
@@ -3329,6 +3393,197 @@ function normalizeEmployeeForm(employee = {}) {
   }
 }
 
+<<<<<<< HEAD
+=======
+
+
+const EMPLOYEE_BULK_TEMPLATE_ROWS = [
+  ['full_name', 'email', 'phone', 'role', 'password', 'active'],
+  ['João Silva', 'joao@movercare.com', '11999999999', 'MAQUEIRO', 'MoverCare@123', 'SIM'],
+  ['Maria Souza', 'maria@movercare.com', '11988888888', 'ENFERMEIRA', 'MoverCare@123', 'SIM'],
+  ['Carlos Lima', 'carlos@movercare.com', '11977777777', 'COORDENADOR', 'MoverCare@123', 'SIM']
+]
+
+const EMPLOYEE_BULK_HEADER_MAP = {
+  full_name: 'full_name',
+  fullname: 'full_name',
+  nome: 'full_name',
+  nomecompleto: 'full_name',
+  nome_completo: 'full_name',
+  name: 'full_name',
+  email: 'email',
+  'e-mail': 'email',
+  mail: 'email',
+  phone: 'phone',
+  telefone: 'phone',
+  celular: 'phone',
+  whatsapp: 'phone',
+  role: 'role',
+  cargo: 'role',
+  perfil: 'role',
+  funcao: 'role',
+  função: 'role',
+  password: 'password',
+  senha: 'password',
+  senhatemporaria: 'password',
+  senha_temporaria: 'password',
+  active: 'active',
+  ativo: 'active',
+  status: 'active'
+}
+
+function normalizeBulkHeader(value) {
+  return normalizeText(value)
+    .replace(/[^a-z0-9_-]/g, '')
+}
+
+function parseCsvText(text) {
+  const rows = []
+  let row = []
+  let current = ''
+  let insideQuotes = false
+
+  for (let index = 0; index < text.length; index += 1) {
+    const char = text[index]
+    const nextChar = text[index + 1]
+
+    if (char === '"' && insideQuotes && nextChar === '"') {
+      current += '"'
+      index += 1
+      continue
+    }
+
+    if (char === '"') {
+      insideQuotes = !insideQuotes
+      continue
+    }
+
+    if ((char === ',' || char === ';') && !insideQuotes) {
+      row.push(current.trim())
+      current = ''
+      continue
+    }
+
+    if ((char === '\n' || char === '\r') && !insideQuotes) {
+      if (char === '\r' && nextChar === '\n') index += 1
+      row.push(current.trim())
+      if (row.some(cell => String(cell || '').trim())) rows.push(row)
+      row = []
+      current = ''
+      continue
+    }
+
+    current += char
+  }
+
+  row.push(current.trim())
+  if (row.some(cell => String(cell || '').trim())) rows.push(row)
+
+  return rows
+}
+
+function normalizeBulkRole(value) {
+  const role = normalizeText(value).replace(/[^a-z0-9]/g, '')
+
+  if (role === 'maqueiro' || role === 'maca' || role === 'maqueiros') return 'MAQUEIRO'
+  if (role === 'enfermeira' || role === 'enfermagem' || role === 'enfermeiro') return 'ENFERMEIRA'
+  if (role === 'coordenador' || role === 'coordenacao' || role === 'coordenação') return 'COORDENADOR'
+  if (role === 'admin' || role === 'administrador') return 'ADMIN'
+
+  return cleanText(value).toUpperCase()
+}
+
+function normalizeBulkActive(value) {
+  const active = normalizeText(value)
+
+  if (!active) return true
+  if (['sim', 's', 'true', 'ativo', '1', 'yes'].includes(active)) return true
+  if (['nao', 'não', 'n', 'false', 'inativo', '0', 'no'].includes(active)) return false
+
+  return true
+}
+
+function createCsvDownload(rows, filename) {
+  const csv = rows
+    .map(row => row.map(cell => {
+      const value = String(cell ?? '')
+      return /[",;\n\r]/.test(value) ? `"${value.replaceAll('"', '""')}"` : value
+    }).join(','))
+    .join('\n')
+
+  const blob = new Blob([`\ufeff${csv}`], { type: 'text/csv;charset=utf-8;' })
+  const url = URL.createObjectURL(blob)
+  const link = document.createElement('a')
+  link.href = url
+  link.download = filename
+  document.body.appendChild(link)
+  link.click()
+  link.remove()
+  URL.revokeObjectURL(url)
+}
+
+function downloadEmployeesCsvTemplate() {
+  createCsvDownload(EMPLOYEE_BULK_TEMPLATE_ROWS, 'modelo_funcionarios_movercare.csv')
+}
+
+function parseEmployeesCsv(text) {
+  const rows = parseCsvText(text)
+
+  if (rows.length < 2) {
+    throw new Error('A planilha precisa ter cabeçalho e pelo menos uma linha de funcionário.')
+  }
+
+  const header = rows[0].map(cell => EMPLOYEE_BULK_HEADER_MAP[normalizeBulkHeader(cell)] || '')
+
+  const required = ['full_name', 'email', 'role']
+  const missing = required.filter(field => !header.includes(field))
+
+  if (missing.length > 0) {
+    throw new Error('Cabeçalho inválido. Use as colunas: full_name, email, phone, role, password, active.')
+  }
+
+  return rows.slice(1).map((row, index) => {
+    const item = {
+      line: index + 2,
+      full_name: '',
+      email: '',
+      phone: '',
+      role: 'MAQUEIRO',
+      password: '',
+      active: true,
+      valid: true,
+      error: ''
+    }
+
+    header.forEach((field, columnIndex) => {
+      if (!field) return
+      const value = row[columnIndex] || ''
+
+      if (field === 'role') item.role = normalizeBulkRole(value)
+      else if (field === 'active') item.active = normalizeBulkActive(value)
+      else item[field] = String(value || '').trim()
+    })
+
+    if (!item.password) item.password = generateTemporaryPassword()
+    item.email = item.email.toLowerCase()
+
+    const errors = []
+
+    if (!item.full_name) errors.push('nome vazio')
+    if (!item.email || !item.email.includes('@')) errors.push('e-mail inválido')
+    if (!EMPLOYEE_ROLES.some(role => role.value === item.role)) errors.push('cargo inválido')
+    if (!item.password || item.password.length < 6) errors.push('senha menor que 6 caracteres')
+
+    if (errors.length > 0) {
+      item.valid = false
+      item.error = errors.join(', ')
+    }
+
+    return item
+  })
+}
+
+>>>>>>> 437ef73afeb0fe058c7b6523e68a4e3e147f3df4
 function EmployeeModal({ title, subtitle, children, onClose }) {
   return (
     <div className="employee-modal-backdrop" role="presentation" onMouseDown={onClose}>
@@ -3355,6 +3610,14 @@ function EmployeesPage({ employees, profile, refreshEmployees, registerAudit, se
   const [saving, setSaving] = useState(false)
   const [localError, setLocalError] = useState('')
   const [localSuccess, setLocalSuccess] = useState('')
+<<<<<<< HEAD
+=======
+  const [bulkRows, setBulkRows] = useState([])
+  const [bulkFileName, setBulkFileName] = useState('')
+  const [bulkImporting, setBulkImporting] = useState(false)
+  const [bulkResult, setBulkResult] = useState(null)
+  const bulkFileInputRef = useRef(null)
+>>>>>>> 437ef73afeb0fe058c7b6523e68a4e3e147f3df4
 
   const filteredEmployees = useMemo(() => {
     const term = normalizeText(search)
@@ -3391,6 +3654,25 @@ function EmployeesPage({ employees, profile, refreshEmployees, registerAudit, se
     setModalMode('create')
   }
 
+<<<<<<< HEAD
+=======
+
+  function openBulkModal() {
+    setBulkRows([])
+    setBulkFileName('')
+    setBulkResult(null)
+    setSelectedEmployee(null)
+    setLocalError('')
+    setLocalSuccess('')
+
+    if (bulkFileInputRef.current) {
+      bulkFileInputRef.current.value = ''
+    }
+
+    setModalMode('bulk')
+  }
+
+>>>>>>> 437ef73afeb0fe058c7b6523e68a4e3e147f3df4
   function openEditModal(employee) {
     setForm(normalizeEmployeeForm(employee))
     setSelectedEmployee(employee)
@@ -3412,6 +3694,12 @@ function EmployeesPage({ employees, profile, refreshEmployees, registerAudit, se
     setModalMode(null)
     setSelectedEmployee(null)
     setForm(EMPTY_EMPLOYEE_FORM)
+<<<<<<< HEAD
+=======
+    setBulkRows([])
+    setBulkFileName('')
+    setBulkResult(null)
+>>>>>>> 437ef73afeb0fe058c7b6523e68a4e3e147f3df4
     setLocalError('')
     setLocalSuccess('')
   }
@@ -3426,6 +3714,7 @@ function EmployeesPage({ employees, profile, refreshEmployees, registerAudit, se
     }
   }
 
+<<<<<<< HEAD
   async function invokeAdminUsers(action, payload) {
     const { data, error } = await supabase.functions.invoke('coordinator-admin-users', {
       body: { action, payload }
@@ -3433,6 +3722,34 @@ function EmployeesPage({ employees, profile, refreshEmployees, registerAudit, se
 
     if (error) throw new Error(error.message || 'Erro ao chamar função segura do Supabase.')
     if (data?.error) throw new Error(data.error)
+=======
+  async function invokeAdminUsers(action, payload = {}) {
+    const { data, error } = await supabase.functions.invoke('coordinator-admin-users', {
+      body: {
+        action,
+        payload
+      }
+    })
+
+    if (error) {
+      let message = error.message || 'Erro ao chamar função segura do Supabase.'
+
+      try {
+        if (error.context) {
+          const responseBody = await error.context.json()
+          message = responseBody?.error || responseBody?.message || message
+        }
+      } catch (_parseError) {
+        // Mantém a mensagem padrão se a resposta da Edge Function não vier em JSON.
+      }
+
+      throw new Error(message)
+    }
+
+    if (data?.error) {
+      throw new Error(data.error)
+    }
+>>>>>>> 437ef73afeb0fe058c7b6523e68a4e3e147f3df4
 
     return data
   }
@@ -3555,13 +3872,133 @@ function EmployeesPage({ employees, profile, refreshEmployees, registerAudit, se
     }
   }
 
+<<<<<<< HEAD
+=======
+
+  async function handleBulkFileChange(event) {
+    const file = event.target.files?.[0]
+    setLocalError('')
+    setLocalSuccess('')
+    setBulkResult(null)
+    setBulkRows([])
+
+    if (!file) return
+
+    setBulkFileName(file.name)
+
+    const extension = file.name.split('.').pop()?.toLowerCase()
+
+    if (!['csv', 'txt'].includes(extension)) {
+      setLocalError('No momento o portal importa arquivo CSV. Abra o modelo no Excel/Google Sheets e salve como CSV UTF-8 antes de enviar.')
+      setBulkRows([])
+      setBulkResult(null)
+      return
+    }
+
+    try {
+      const text = await file.text()
+      const rows = parseEmployeesCsv(text)
+      const duplicatedEmails = new Set()
+      const seenEmails = new Set()
+
+      const checkedRows = rows.map(row => {
+        if (seenEmails.has(row.email)) duplicatedEmails.add(row.email)
+        seenEmails.add(row.email)
+        return row
+      }).map(row => {
+        if (duplicatedEmails.has(row.email)) {
+          return {
+            ...row,
+            valid: false,
+            error: row.error ? `${row.error}, e-mail duplicado na planilha` : 'e-mail duplicado na planilha'
+          }
+        }
+        return row
+      })
+
+      setBulkRows(checkedRows)
+
+      const invalidCount = checkedRows.filter(row => !row.valid).length
+      if (invalidCount > 0) {
+        setLocalError(`${invalidCount} linha(s) precisam de correção antes da importação.`)
+      } else {
+        setLocalSuccess(`${checkedRows.length} funcionário(s) prontos para importar.`)
+      }
+    } catch (error) {
+      setLocalError(error?.message || 'Erro ao ler planilha.')
+    }
+  }
+
+  async function handleBulkImport() {
+    const validRows = bulkRows.filter(row => row.valid)
+
+    if (validRows.length === 0) {
+      setLocalError('Nenhuma linha válida para importar.')
+      return
+    }
+
+    const ok = window.confirm(`Deseja importar ${validRows.length} funcionário(s)?`)
+    if (!ok) return
+
+    setBulkImporting(true)
+    setLocalError('')
+    setLocalSuccess('')
+    setBulkResult(null)
+
+    const results = []
+
+    try {
+      for (const row of validRows) {
+        try {
+          await invokeAdminUsers('create', {
+            full_name: row.full_name,
+            email: row.email,
+            phone: row.phone,
+            role: row.role,
+            password: row.password,
+            active: row.active
+          })
+
+          results.push({ ...row, status: 'ok', message: 'Importado' })
+        } catch (error) {
+          results.push({ ...row, status: 'error', message: error?.message || 'Erro ao importar' })
+        }
+      }
+
+      const successCount = results.filter(result => result.status === 'ok').length
+      const errorCount = results.length - successCount
+
+      setBulkResult({ successCount, errorCount, rows: results })
+      await refreshEmployees()
+      await registerAudit?.('FUNCIONÁRIOS', `Importação em massa: ${successCount} sucesso(s), ${errorCount} erro(s)`, { total: results.length })
+
+      if (errorCount > 0) {
+        setGlobalError?.(`Importação finalizada com ${errorCount} erro(s). Veja o resultado no modal.`)
+      } else {
+        setGlobalSuccess?.(`${successCount} funcionário(s) importado(s) com sucesso.`)
+      }
+    } finally {
+      setBulkImporting(false)
+    }
+  }
+
+>>>>>>> 437ef73afeb0fe058c7b6523e68a4e3e147f3df4
   return (
     <>
       <PageHeader
         title="Funcionários"
         subtitle="Cadastre acessos para app do maqueiro, portal enfermagem e portal coordenador"
         profile={profile}
+<<<<<<< HEAD
         right={<button type="button" onClick={openCreateModal}>+ Novo funcionário</button>}
+=======
+        right={
+          <div className="employee-header-actions">
+            <button type="button" className="light-button" onClick={openBulkModal}>Importar em massa</button>
+            <button type="button" onClick={openCreateModal}>+ Novo funcionário</button>
+          </div>
+        }
+>>>>>>> 437ef73afeb0fe058c7b6523e68a4e3e147f3df4
       />
 
       <section className="employee-stats-grid">
@@ -3656,6 +4093,95 @@ function EmployeesPage({ employees, profile, refreshEmployees, registerAudit, se
         </EmployeeModal>
       )}
 
+<<<<<<< HEAD
+=======
+
+      {modalMode === 'bulk' && (
+        <EmployeeModal title="Importar funcionários em massa" subtitle="Envie uma planilha CSV com nome, e-mail, telefone, cargo, senha e status" onClose={closeModal}>
+          <div className="employee-form bulk-import-form">
+            {localError && <div className="error no-print">{localError}</div>}
+            {localSuccess && <div className="success no-print">{localSuccess}</div>}
+
+            <div className="employee-warning-box">
+              <strong>Modelo reconhecido pelo MoverCare</strong>
+              <p>Use as colunas: full_name, email, phone, role, password, active. Os cargos aceitos são MAQUEIRO, ENFERMEIRA, COORDENADOR e ADMIN.</p>
+            </div>
+
+            <div className="bulk-import-actions">
+              <button type="button" className="light-button" onClick={downloadEmployeesCsvTemplate}>Baixar modelo CSV</button>
+              <input
+                ref={bulkFileInputRef}
+                className="bulk-hidden-file-input"
+                type="file"
+                accept=".csv,.txt,text/csv"
+                onChange={handleBulkFileChange}
+              />
+
+              <button
+                type="button"
+                className="bulk-file-input"
+                onClick={() => bulkFileInputRef.current?.click()}
+              >
+                {bulkFileName || 'Selecionar planilha CSV'}
+              </button>
+            </div>
+
+            {bulkRows.length > 0 && (
+              <div className="bulk-preview-box">
+                <div className="bulk-preview-head">
+                  <strong>Prévia da importação</strong>
+                  <span>{bulkRows.filter(row => row.valid).length} válidas • {bulkRows.filter(row => !row.valid).length} com erro</span>
+                </div>
+
+                <div className="bulk-preview-table">
+                  <div className="bulk-preview-row bulk-preview-title">
+                    <span>Linha</span>
+                    <span>Nome</span>
+                    <span>E-mail</span>
+                    <span>Cargo</span>
+                    <span>Status</span>
+                  </div>
+
+                  {bulkRows.slice(0, 80).map(row => (
+                    <div key={`${row.line}-${row.email}`} className={`bulk-preview-row ${row.valid ? 'ok' : 'error'}`}>
+                      <span>{row.line}</span>
+                      <span>{row.full_name || '-'}</span>
+                      <span>{row.email || '-'}</span>
+                      <span>{row.role || '-'}</span>
+                      <span>{row.valid ? 'OK' : row.error}</span>
+                    </div>
+                  ))}
+                </div>
+
+                {bulkRows.length > 80 && <small>Mostrando as primeiras 80 linhas.</small>}
+              </div>
+            )}
+
+            {bulkResult && (
+              <div className="bulk-result-box">
+                <strong>Resultado</strong>
+                <p>{bulkResult.successCount} sucesso(s) • {bulkResult.errorCount} erro(s)</p>
+                {bulkResult.errorCount > 0 && (
+                  <div className="bulk-result-errors">
+                    {bulkResult.rows.filter(row => row.status === 'error').slice(0, 20).map(row => (
+                      <small key={`${row.line}-${row.email}-error`}>Linha {row.line}: {row.email} — {row.message}</small>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+
+            <div className="employee-modal-actions">
+              <button type="button" className="light-button" onClick={closeModal} disabled={bulkImporting}>Fechar</button>
+              <button type="button" onClick={handleBulkImport} disabled={bulkImporting || bulkRows.filter(row => row.valid).length === 0}>
+                {bulkImporting ? 'Importando...' : 'Importar funcionários'}
+              </button>
+            </div>
+          </div>
+        </EmployeeModal>
+      )}
+
+>>>>>>> 437ef73afeb0fe058c7b6523e68a4e3e147f3df4
       {modalMode === 'edit' && (
         <EmployeeModal title="Editar funcionário" subtitle={employeeDisplayName(selectedEmployee)} onClose={closeModal}>
           <EmployeeForm
@@ -3707,6 +4233,10 @@ function EmployeesPage({ employees, profile, refreshEmployees, registerAudit, se
   )
 }
 
+<<<<<<< HEAD
+=======
+
+>>>>>>> 437ef73afeb0fe058c7b6523e68a4e3e147f3df4
 function EmployeeForm({ form, updateForm, saving, localError, localSuccess, submitLabel, onSubmit, showPassword = false, showActive = false }) {
   return (
     <form className="employee-form" onSubmit={onSubmit}>
@@ -4821,13 +5351,23 @@ function App() {
   const [profile, setProfile] = useState(null)
   const [activePage, setActivePage] = useState('overview')
   const [selectedCallId, setSelectedCallId] = useState(null)
+<<<<<<< HEAD
+=======
+  const [cancelTargetCall, setCancelTargetCall] = useState(null)
+  const [cancelReason, setCancelReason] = useState('')
+  const [cancelSaving, setCancelSaving] = useState(false)
+  const [cancelError, setCancelError] = useState('')
+>>>>>>> 437ef73afeb0fe058c7b6523e68a4e3e147f3df4
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
   const [panelTheme, setPanelTheme] = useState('light')
   const [checking, setChecking] = useState(true)
   const [loading, setLoading] = useState(false)
   const [calls, setCalls] = useState([])
   const [maqueiros, setMaqueiros] = useState([])
+<<<<<<< HEAD
   const [schedules, setSchedules] = useState([])
+=======
+>>>>>>> 437ef73afeb0fe058c7b6523e68a4e3e147f3df4
   const [employees, setEmployees] = useState([])
   const [dashboardStats, setDashboardStats] = useState(null)
   const [sectors, setSectors] = useState([])
@@ -4852,7 +5392,10 @@ function App() {
         setProfile(null)
         setCalls([])
         setMaqueiros([])
+<<<<<<< HEAD
         setSchedules([])
+=======
+>>>>>>> 437ef73afeb0fe058c7b6523e68a4e3e147f3df4
         setEmployees([])
         setDashboardStats(null)
         setSectors([])
@@ -4918,7 +5461,10 @@ function App() {
     await Promise.all([
       loadCalls(),
       loadMaqueiros(),
+<<<<<<< HEAD
       loadSchedules(),
+=======
+>>>>>>> 437ef73afeb0fe058c7b6523e68a4e3e147f3df4
       loadEmployees(),
       loadDashboardStats(),
       loadSectors()
@@ -4949,6 +5495,9 @@ function App() {
         qr_origin_read_at,
         qr_destination_read_at,
         completed_at,
+        cancellation_reason,
+        cancelled_at,
+        cancelled_by,
         timeout_count,
         origin:origin_sector_id(id, name, qr_token),
         destination:destination_sector_id(id, name, qr_token),
@@ -4983,6 +5532,7 @@ function App() {
   }
 
 
+<<<<<<< HEAD
 
   async function loadSchedules() {
     const { data, error: schedulesError } = await supabase
@@ -5014,6 +5564,8 @@ function App() {
     setSchedules(data || [])
   }
 
+=======
+>>>>>>> 437ef73afeb0fe058c7b6523e68a4e3e147f3df4
   async function loadEmployees() {
     const { data, error: functionError } = await supabase.functions.invoke('coordinator-admin-users', {
       body: { action: 'list' }
@@ -5175,6 +5727,7 @@ function App() {
       )
       .subscribe()
 
+<<<<<<< HEAD
     const schedulesChannel = supabase
       .channel('coordinator-schedules-auto-refresh')
       .on(
@@ -5188,6 +5741,8 @@ function App() {
       )
       .subscribe()
 
+=======
+>>>>>>> 437ef73afeb0fe058c7b6523e68a4e3e147f3df4
     const settingsChannel = supabase
       .channel('coordinator-settings-sync')
       .on(
@@ -5234,7 +5789,10 @@ function App() {
       supabase.removeChannel(callsChannel)
       supabase.removeChannel(maqueiroStatusChannel)
       supabase.removeChannel(sectorsChannel)
+<<<<<<< HEAD
       supabase.removeChannel(schedulesChannel)
+=======
+>>>>>>> 437ef73afeb0fe058c7b6523e68a4e3e147f3df4
       supabase.removeChannel(settingsChannel)
       supabase.removeChannel(auditChannel)
     }
@@ -5345,6 +5903,60 @@ function App() {
     setLoading(false)
   }
 
+<<<<<<< HEAD
+=======
+  function openCancelCallModal(call) {
+    setCancelTargetCall(call)
+    setCancelReason('')
+    setCancelError('')
+  }
+
+  function closeCancelCallModal() {
+    if (cancelSaving) return
+    setCancelTargetCall(null)
+    setCancelReason('')
+    setCancelError('')
+  }
+
+  async function confirmCancelCall() {
+    if (!cancelTargetCall?.id) return
+
+    const reason = cancelReason.trim()
+
+    if (reason.length < 5) {
+      setCancelError('Informe um motivo com pelo menos 5 caracteres.')
+      return
+    }
+
+    setCancelSaving(true)
+    setCancelError('')
+    setError('')
+
+    const { error: rpcError } = await supabase.rpc('cancel_transport_call', {
+      p_call_id: cancelTargetCall.id,
+      p_reason: reason
+    })
+
+    if (rpcError) {
+      setCancelError(rpcError.message)
+      setCancelSaving(false)
+      return
+    }
+
+    await registerAudit('CANCELAMENTO', `Cancelou chamado #${cancelTargetCall.number || cancelTargetCall.id}`, {
+      callId: cancelTargetCall.id,
+      reason
+    })
+
+    setSuccess('Chamado cancelado com sucesso.')
+    window.setTimeout(() => setSuccess(''), 2600)
+    setCancelTargetCall(null)
+    setCancelReason('')
+    await refreshData()
+    setCancelSaving(false)
+  }
+
+>>>>>>> 437ef73afeb0fe058c7b6523e68a4e3e147f3df4
   function openCallDetails(callId) {
     setSelectedCallId(callId)
     setActivePage('call-detail')
@@ -5596,6 +6208,7 @@ function App() {
               selectedMaqueiroByCall={selectedMaqueiroByCall}
               setSelectedMaqueiroByCall={setSelectedMaqueiroByCall}
               reassignCall={reassignCall}
+              cancelCall={openCancelCallModal}
             />
           )}
 
@@ -5613,6 +6226,10 @@ function App() {
               profile={profile}
               refreshData={refreshData}
               openCallDetails={openCallDetails}
+<<<<<<< HEAD
+=======
+              cancelCall={openCancelCallModal}
+>>>>>>> 437ef73afeb0fe058c7b6523e68a4e3e147f3df4
             />
           )}
 
@@ -5627,6 +6244,10 @@ function App() {
               profile={profile}
               refreshData={refreshData}
               onBack={() => setActivePage('calls')}
+<<<<<<< HEAD
+=======
+              onCancelCall={openCancelCallModal}
+>>>>>>> 437ef73afeb0fe058c7b6523e68a4e3e147f3df4
             />
           )}
 
@@ -5650,6 +6271,7 @@ function App() {
             />
           )}
 
+<<<<<<< HEAD
           {activePage === 'schedule' && (
             <SchedulePage
               schedules={schedules}
@@ -5663,6 +6285,8 @@ function App() {
             />
           )}
 
+=======
+>>>>>>> 437ef73afeb0fe058c7b6523e68a4e3e147f3df4
           {activePage === 'employees' && (
             <EmployeesPage
               employees={employees}
@@ -5719,6 +6343,47 @@ function App() {
             <ProfilePage profile={profile} sectors={sectors} />
           )}
         </section>
+
+        {cancelTargetCall && (
+          <div className="call-cancel-modal-backdrop no-print" role="dialog" aria-modal="true">
+            <div className="call-cancel-modal">
+              <div className="call-cancel-modal-header">
+                <div>
+                  <span className="section-kicker">Cancelamento de chamado</span>
+                  <h2>Cancelar chamado #{cancelTargetCall.number || '-'}</h2>
+                  <p>Informe o motivo. O chamado ficará como CANCELADO e continuará no histórico.</p>
+                </div>
+                <button type="button" className="call-modal-close" onClick={closeCancelCallModal} aria-label="Fechar cancelamento">×</button>
+              </div>
+
+              <div className="cancel-call-summary">
+                <div><small>Paciente</small><strong>{cancelTargetCall.patient_code || 'Não informado'}</strong></div>
+                <div><small>Rota</small><strong>{cancelTargetCall.origin?.name || '-'} → {cancelTargetCall.destination?.name || '-'}</strong></div>
+                <div><small>Status atual</small><strong>{formatValue(cancelTargetCall.status)}</strong></div>
+              </div>
+
+              <label className="cancel-reason-field">
+                Motivo do cancelamento
+                <textarea
+                  rows={4}
+                  value={cancelReason}
+                  onChange={(event) => setCancelReason(event.target.value)}
+                  placeholder="Ex.: paciente não está mais no setor, exame cancelado, transporte duplicado..."
+                  autoFocus
+                />
+              </label>
+
+              {cancelError && <div className="error">{cancelError}</div>}
+
+              <div className="call-cancel-modal-actions">
+                <button type="button" className="light-button" onClick={closeCancelCallModal} disabled={cancelSaving}>Voltar</button>
+                <button type="button" className="danger-button" onClick={confirmCancelCall} disabled={cancelSaving}>
+                  {cancelSaving ? 'Cancelando...' : 'Confirmar cancelamento'}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </main>
     </div>
   )

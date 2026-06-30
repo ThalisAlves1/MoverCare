@@ -71,11 +71,23 @@ export async function createTransportCall(form: CreateCallForm): Promise<Transpo
   return data as TransportCall;
 }
 
+export async function cancelTransportCall(callId: string, reason: string): Promise<void> {
+  const { error } = await supabase.rpc('cancel_transport_call', {
+    p_call_id: callId,
+    p_reason: reason.trim(),
+  });
+
+  if (error) throw error;
+}
+
 export async function getMyCalls(): Promise<TransportCall[]> {
   const { data, error } = await supabase
     .from('transport_calls')
     .select(`
       *,
+      cancellation_reason,
+      cancelled_at,
+      cancelled_by,
       origin_sector:sectors!transport_calls_origin_sector_id_fkey(id, name),
       destination_sector:sectors!transport_calls_destination_sector_id_fkey(id, name)
     `)

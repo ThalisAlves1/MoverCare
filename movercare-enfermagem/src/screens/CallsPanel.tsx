@@ -21,7 +21,7 @@ import {
   UserCheck,
   X,
 } from 'lucide-react';
-import { createTransportCall } from '../services/movercareService';
+import { cancelTransportCall, createTransportCall } from '../services/movercareService';
 import type { CallStatus, CreateCallForm, Sector, TransportCall } from '../types/movercare';
 import '../styles/call-timeline-v49.css';
 import '../styles/nursing-sla-alerts-v50.css';
@@ -666,7 +666,86 @@ function TransportTracker({ call, compact = false }: { call: TransportCall; comp
   );
 }
 
-function CallDetailsModal({ call, sectors, onClose, onRecallCreated }: { call: TransportCall; sectors: Sector[]; onClose: () => void; onRecallCreated: () => void }) {
+
+function CancelCallModal({
+  call,
+  onClose,
+  onCancelled,
+}: {
+  call: TransportCall;
+  onClose: () => void;
+  onCancelled: () => void;
+}) {
+  const [reason, setReason] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const typedCall = call as any;
+
+  async function confirmCancel() {
+    const cleanReason = reason.trim();
+
+    if (cleanReason.length < 5) {
+      setError('Informe um motivo com pelo menos 5 caracteres.');
+      return;
+    }
+
+    setSaving(true);
+    setError(null);
+
+    try {
+      await cancelTransportCall(call.id, cleanReason);
+      onCancelled();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Erro ao cancelar chamado.');
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div className="call-modal-backdrop" role="dialog" aria-modal="true">
+      <div className="call-modal cancel-call-modal">
+        <button type="button" className="call-modal-close" onClick={onClose} aria-label="Fechar cancelamento"><X size={18} /></button>
+
+        <div className="call-modal-header">
+          <div>
+            <span className="section-kicker"><AlertTriangle size={14} /> Cancelamento</span>
+            <h2>Cancelar chamado #{String(call.number).padStart(6, '0')}</h2>
+            <p>Informe o motivo. O chamado ficará como cancelado e continuará no histórico.</p>
+          </div>
+          <span className={`status-pill ${statusClass(call.status)}`}>{statusLabel(call.status)}</span>
+        </div>
+
+        <div className="call-route-card">
+          <div><small>Paciente</small><strong>{call.patient_code || 'Paciente não informado'}</strong></div>
+          <Route size={22} />
+          <div><small>Rota</small><strong>{typedCall.origin_sector?.name ?? '-'} → {typedCall.destination_sector?.name ?? '-'}</strong></div>
+        </div>
+
+        <label className="cancel-reason-field">Motivo do cancelamento
+          <textarea
+            rows={4}
+            value={reason}
+            onChange={(event) => setReason(event.target.value)}
+            placeholder="Ex.: exame cancelado, transporte duplicado, paciente não está mais no setor..."
+            autoFocus
+          />
+        </label>
+
+        {error && <div className="error-box">{error}</div>}
+
+        <div className="call-modal-actions">
+          <button type="button" className="light-button" onClick={onClose} disabled={saving}>Voltar</button>
+          <button type="button" className="urgent-recall-button" onClick={confirmCancel} disabled={saving}>
+            {saving ? 'Cancelando...' : <><AlertTriangle size={17} /> Confirmar cancelamento</>}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function CallDetailsModal({ call, sectors, onClose, onRecallCreated, onCancelCall }: { call: TransportCall; sectors: Sector[]; onClose: () => void; onRecallCreated: () => void; onCancelCall: (call: TransportCall) => void }) {
   const typedCall = call as any;
   const defaultOrigin = typedCall.destination_sector_id ?? typedCall.destination_sector?.id ?? '';
   const defaultDestination = sectors.find((sector) => sector.id !== defaultOrigin)?.id ?? '';
@@ -756,12 +835,21 @@ function CallDetailsModal({ call, sectors, onClose, onRecallCreated }: { call: T
           <DetailItem label="Maqueiro" value={typedCall.assigned_maqueiro?.full_name ?? typedCall.maqueiro?.full_name ?? 'Não atribuído'} />
           <DetailItem label="Precaução" value={typedCall.infection_precaution ?? '-'} />
           <DetailItem label="Observação" value={typedCall.observation ?? '-'} />
+          {call.status === 'CANCELADO' && (
+            <>
+              <DetailItem label="Cancelado em" value={formatDate(typedCall.cancelled_at)} />
+              <DetailItem label="Motivo do cancelamento" value={typedCall.cancellation_reason ?? 'Motivo não informado'} />
+            </>
+          )}
         </div>
 
         {!showRecall && !recallSuccess && (
           <div className="call-modal-actions">
             <button type="button" onClick={() => { setUrgentRecall(false); setShowRecall(true); }}><RefreshCw size={17} /> Rechamar paciente</button>
             <button type="button" className="urgent-recall-button" onClick={() => { setUrgentRecall(true); setShowRecall(true); }}><AlertTriangle size={17} /> Rechamada urgente</button>
+            {!['CONCLUIDO', 'CANCELADO'].includes(call.status) && (
+              <button type="button" className="danger-outline-button" onClick={() => onCancelCall(call)}><X size={17} /> Cancelar chamado</button>
+            )}
             <button type="button" className="light-button" onClick={onClose}>Fechar</button>
           </div>
         )}
@@ -854,6 +942,7 @@ export function CallsPanel({ calls, sectors, loading, onCreated }: CallsPanelPro
   const [pageSize, setPageSize] = useState(7);
   const [page, setPage] = useState(1);
   const [selectedCall, setSelectedCall] = useState<TransportCall | null>(null);
+  const [cancelTargetCall, setCancelTargetCall] = useState<TransportCall | null>(null);
   const [toasts, setToasts] = useState<NursingToast[]>([]);
   const previousCallStatusRef = useRef<Map<string, CallStatus>>(new Map());
   const firstToastLoadRef = useRef(true);
@@ -906,6 +995,16 @@ export function CallsPanel({ calls, sectors, loading, onCreated }: CallsPanelPro
 
   function closeToast(id: string) {
     setToasts((current) => current.filter((toast) => toast.id !== id));
+  }
+
+  function openCancelModal(call: TransportCall) {
+    setCancelTargetCall(call);
+  }
+
+  function finishCancel() {
+    setCancelTargetCall(null);
+    setSelectedCall(null);
+    onCreated();
   }
 
   const filteredCalls = useMemo(() => {
@@ -1036,7 +1135,7 @@ export function CallsPanel({ calls, sectors, loading, onCreated }: CallsPanelPro
           {currentCalls.map((call) => {
             const typedCall = call as any;
             return (
-              <button type="button" className="reference-data-row" key={call.id} onClick={() => setSelectedCall(call)}>
+              <article className="reference-data-row" key={call.id} onClick={() => setSelectedCall(call)} role="button" tabIndex={0}>
                 <strong>#{String(call.number).padStart(6, '0')}</strong>
                 <span>{typedCall.patient_code || 'Paciente não informado'}</span>
                 <span>{typedCall.origin_sector?.name ?? '-'}</span>
@@ -1046,7 +1145,19 @@ export function CallsPanel({ calls, sectors, loading, onCreated }: CallsPanelPro
                 <span className={`status-pill ${statusClass(call.status)}`}>{statusLabel(call.status)}</span>
                 <div className="mini-tracker-cell"><TransportTracker call={call} compact /></div>
                 <span className="row-action-link"><Eye size={15} /> Detalhes</span>
-              </button>
+                {!['CONCLUIDO', 'CANCELADO'].includes(call.status) && (
+                  <button
+                    type="button"
+                    className="row-cancel-button"
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      openCancelModal(call);
+                    }}
+                  >
+                    <X size={15} /> Cancelar
+                  </button>
+                )}
+              </article>
             );
           })}
         </div>
@@ -1069,7 +1180,11 @@ export function CallsPanel({ calls, sectors, loading, onCreated }: CallsPanelPro
       </section>
 
       {selectedCall && (
-        <CallDetailsModal call={selectedCall} sectors={sectors} onClose={() => setSelectedCall(null)} onRecallCreated={onCreated} />
+        <CallDetailsModal call={selectedCall} sectors={sectors} onClose={() => setSelectedCall(null)} onRecallCreated={onCreated} onCancelCall={openCancelModal} />
+      )}
+
+      {cancelTargetCall && (
+        <CancelCallModal call={cancelTargetCall} onClose={() => setCancelTargetCall(null)} onCancelled={finishCancel} />
       )}
     </>
   );
