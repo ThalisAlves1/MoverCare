@@ -4971,16 +4971,65 @@ function App() {
     setCalls(data || [])
   }
 
-  async function loadMaqueiros() {
-    const { data, error: maqueirosError } = await supabase.rpc('coordinator_get_maqueiros')
+async function loadMaqueiros() {
+  setError('')
 
-    if (maqueirosError) {
-      setError(maqueirosError.message)
-      return
-    }
+  const normalizeMaqueiro = (m) => ({
+    ...m,
+    status: String(m.status || 'OFFLINE').trim().toUpperCase(),
+    role: String(m.role || 'MAQUEIRO').trim().toUpperCase(),
+    active: m.active !== false,
+    current_sector_id: m.current_sector_id || m.sector_id || null,
+    current_sector_name: m.current_sector_name || m.sector_name || m.sector?.name || ''
+  })
 
-    setMaqueiros(data || [])
+  const { data, error: maqueirosError } = await supabase.rpc('coordinator_get_maqueiros')
+
+  if (!maqueirosError && Array.isArray(data) && data.length > 0) {
+    const normalized = data.map(normalizeMaqueiro)
+    console.log('MAQUEIROS RPC:', normalized)
+    setMaqueiros(normalized)
+    return
   }
+
+  console.warn('RPC coordinator_get_maqueiros vazia ou com erro:', maqueirosError?.message || maqueirosError)
+
+  const { data: fallbackData, error: fallbackError } = await supabase
+    .from('profiles')
+    .select(`
+      id,
+      full_name,
+      name,
+      email,
+      phone,
+      role,
+      status,
+      active,
+      sector_id,
+      current_sector_id,
+      last_seen_at,
+      updated_at,
+      sector:sector_id(id, name),
+      current_sector:current_sector_id(id, name)
+    `)
+    .eq('role', 'MAQUEIRO')
+    .eq('active', true)
+    .order('full_name', { ascending: true })
+
+  if (fallbackError) {
+    setError(fallbackError.message)
+    return
+  }
+
+  const normalizedFallback = (fallbackData || []).map((m) => normalizeMaqueiro({
+    ...m,
+    sector_name: m.sector?.name || '',
+    current_sector_name: m.current_sector?.name || m.sector?.name || ''
+  }))
+
+  console.log('MAQUEIROS FALLBACK:', normalizedFallback)
+  setMaqueiros(normalizedFallback)
+}
 
 
 
