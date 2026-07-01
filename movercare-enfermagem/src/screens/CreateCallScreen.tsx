@@ -6,15 +6,18 @@ import {
   ClipboardPlus,
   MapPin,
   PlusCircle,
+  RefreshCw,
   Route,
+  UsersRound,
   ShieldCheck,
   X,
 } from 'lucide-react';
 
-import { createTransportCall } from '../services/movercareService';
+import { createTransportCall, getAvailableMaqueirosForCall } from '../services/movercareService';
 import type {
   CallPriority,
   CreateCallForm,
+  MaqueiroOption,
   Sector,
   TransportRisk,
   TransportType,
@@ -106,6 +109,9 @@ interface SuccessModalData {
   priority: CallPriority;
   risk: TransportRisk;
   transportType: TransportType;
+  assignedMaqueiroName?: string | null;
+  assignedMaqueiroSector?: string | null;
+  assignedMaqueiroTag?: string | null;
 }
 
 interface ConfirmationModalData extends SuccessModalData {
@@ -144,8 +150,8 @@ function ConfirmationModal({
         <span className="mc-modal-kicker">Confirmar solicitação</span>
         <h2>Revise antes de enviar</h2>
         <p>
-          Confira os dados do transporte. Após confirmar, o chamado será enviado para
-          distribuição automática.
+          Confira os dados do transporte. Após confirmar, o chamado será criado e enviado
+          ao maqueiro selecionado, quando houver seleção.
         </p>
 
         <div className="mc-modal-route">
@@ -188,6 +194,16 @@ function ConfirmationModal({
           <div>
             <small>Risco</small>
             <strong className={`mc-risk mc-risk-${data.risk.toLowerCase()}`}>{data.risk}</strong>
+          </div>
+
+          <div>
+            <small>Maqueiro</small>
+            <strong>{data.assignedMaqueiroName || 'Sem atribuição'}</strong>
+          </div>
+
+          <div>
+            <small>Setor do maqueiro</small>
+            <strong>{data.assignedMaqueiroSector || '-'}</strong>
           </div>
 
           <div>
@@ -248,8 +264,8 @@ function SuccessModal({
         <span className="mc-modal-kicker">Solicitação enviada</span>
         <h2>Chamado criado com sucesso</h2>
         <p>
-          O MoverCare já iniciou a distribuição automática para o maqueiro disponível mais
-          adequado.
+          O MoverCare registrou a solicitação. Quando um maqueiro foi selecionado,
+          o chamado já foi enviado para aceite no app.
         </p>
 
         <div className="mc-modal-route">
@@ -291,6 +307,11 @@ function SuccessModal({
             <small>Risco</small>
             <strong>{data.risk}</strong>
           </div>
+
+          <div>
+            <small>Maqueiro</small>
+            <strong>{data.assignedMaqueiroName || 'Sem atribuição'}</strong>
+          </div>
         </div>
 
         <div className="mc-success-steps">
@@ -301,7 +322,7 @@ function SuccessModal({
 
           <div>
             <span />
-            Distribuição automática
+            Maqueiro selecionado
           </div>
 
           <div>
@@ -339,6 +360,7 @@ export function CreateCallScreen({ sectors, onCreated }: CreateCallScreenProps) 
       teamConfirmed: false,
       equipmentConfirmed: false,
       infectionPrecaution: 'PADRAO',
+      assignedMaqueiroId: '',
       observation: '',
     }),
     []
@@ -349,11 +371,56 @@ export function CreateCallScreen({ sectors, onCreated }: CreateCallScreenProps) 
   const [error, setError] = useState<string | null>(null);
   const [successModal, setSuccessModal] = useState<SuccessModalData | null>(null);
   const [confirmationModal, setConfirmationModal] = useState<ConfirmationModalData | null>(null);
+  const [availableMaqueiros, setAvailableMaqueiros] = useState<MaqueiroOption[]>([]);
+  const [loadingMaqueiros, setLoadingMaqueiros] = useState(false);
+  const [maqueirosError, setMaqueirosError] = useState<string | null>(null);
 
   const originName = form.originSectorId ? findSectorName(sectors, form.originSectorId) : 'Selecione a origem';
   const destinationName = form.destinationSectorId
     ? findSectorName(sectors, form.destinationSectorId)
     : 'Selecione o destino';
+
+  const selectedMaqueiro = availableMaqueiros.find((maqueiro) => maqueiro.id === form.assignedMaqueiroId) ?? null;
+
+  function maqueiroDisplayName(maqueiro?: MaqueiroOption | null) {
+    return maqueiro?.full_name || maqueiro?.name || maqueiro?.email || 'Maqueiro';
+  }
+
+  function maqueiroSectorName(maqueiro?: MaqueiroOption | null) {
+    return maqueiro?.current_sector_name || maqueiro?.sector_name || 'Sem setor informado';
+  }
+
+  function maqueiroTag(maqueiro?: MaqueiroOption | null) {
+    if (!maqueiro) return null;
+    if (maqueiro.same_origin_sector) return 'Disponível no setor de origem';
+    if (maqueiro.same_destination_sector) return 'Disponível no setor de destino';
+    return 'Disponível em outro setor';
+  }
+
+  async function loadAvailableMaqueiros() {
+    setMaqueirosError(null);
+
+    if (!form.originSectorId) {
+      setAvailableMaqueiros([]);
+      return;
+    }
+
+    setLoadingMaqueiros(true);
+
+    try {
+      const data = await getAvailableMaqueirosForCall(form.originSectorId, form.destinationSectorId || null);
+      setAvailableMaqueiros(data);
+
+      if (form.assignedMaqueiroId && !data.some((maqueiro) => maqueiro.id === form.assignedMaqueiroId)) {
+        setForm((current) => ({ ...current, assignedMaqueiroId: '' }));
+      }
+    } catch (err) {
+      setAvailableMaqueiros([]);
+      setMaqueirosError(err instanceof Error ? err.message : 'Erro ao carregar maqueiros disponíveis.');
+    } finally {
+      setLoadingMaqueiros(false);
+    }
+  }
 
   useEffect(() => {
     setForm((current) => ({
@@ -366,6 +433,48 @@ export function CreateCallScreen({ sectors, onCreated }: CreateCallScreenProps) 
         : '',
     }));
   }, [sectors]);
+
+  useEffect(() => {
+    let active = true;
+
+    async function run() {
+      setMaqueirosError(null);
+
+      if (!form.originSectorId) {
+        if (active) {
+          setAvailableMaqueiros([]);
+          setLoadingMaqueiros(false);
+        }
+        return;
+      }
+
+      setLoadingMaqueiros(true);
+
+      try {
+        const data = await getAvailableMaqueirosForCall(form.originSectorId, form.destinationSectorId || null);
+
+        if (!active) return;
+
+        setAvailableMaqueiros(data);
+
+        if (form.assignedMaqueiroId && !data.some((maqueiro) => maqueiro.id === form.assignedMaqueiroId)) {
+          setForm((current) => ({ ...current, assignedMaqueiroId: '' }));
+        }
+      } catch (err) {
+        if (!active) return;
+        setAvailableMaqueiros([]);
+        setMaqueirosError(err instanceof Error ? err.message : 'Erro ao carregar maqueiros disponíveis.');
+      } finally {
+        if (active) setLoadingMaqueiros(false);
+      }
+    }
+
+    run();
+
+    return () => {
+      active = false;
+    };
+  }, [form.originSectorId, form.destinationSectorId]);
 
   function update<K extends keyof CreateCallForm>(key: K, value: CreateCallForm[K]) {
     setForm((current) => ({ ...current, [key]: value }));
@@ -406,6 +515,9 @@ export function CreateCallScreen({ sectors, onCreated }: CreateCallScreenProps) 
       priority: form.priority,
       risk: form.risk,
       transportType: form.transportType,
+      assignedMaqueiroName: selectedMaqueiro ? maqueiroDisplayName(selectedMaqueiro) : null,
+      assignedMaqueiroSector: selectedMaqueiro ? maqueiroSectorName(selectedMaqueiro) : null,
+      assignedMaqueiroTag: selectedMaqueiro ? maqueiroTag(selectedMaqueiro) : null,
       infectionPrecaution: form.infectionPrecaution,
       observation: form.observation,
     };
@@ -438,12 +550,16 @@ export function CreateCallScreen({ sectors, onCreated }: CreateCallScreenProps) 
         priority: form.priority,
         risk: form.risk,
         transportType: form.transportType,
+        assignedMaqueiroName: selectedMaqueiro ? maqueiroDisplayName(selectedMaqueiro) : null,
+        assignedMaqueiroSector: selectedMaqueiro ? maqueiroSectorName(selectedMaqueiro) : null,
+        assignedMaqueiroTag: selectedMaqueiro ? maqueiroTag(selectedMaqueiro) : null,
       };
 
       await createTransportCall({
         ...form,
         patientCode: form.patientCode.trim(),
         bedNumber: form.bedNumber.trim(),
+        assignedMaqueiroId: form.assignedMaqueiroId || null,
         observation: form.observation.trim(),
       });
 
@@ -716,6 +832,133 @@ export function CreateCallScreen({ sectors, onCreated }: CreateCallScreenProps) 
             border: 1px solid var(--mc-create-border);
             border-radius: 26px;
             background: var(--mc-create-soft);
+          }
+
+          .mc-assignment-panel {
+            display: grid;
+            gap: 14px;
+            padding: clamp(18px, 2.5vw, 24px);
+            border: 1px solid var(--mc-create-border);
+            border-radius: 26px;
+            background: var(--mc-create-soft);
+          }
+
+          .mc-assignment-header {
+            display: flex;
+            align-items: flex-start;
+            justify-content: space-between;
+            gap: 14px;
+          }
+
+          .mc-assignment-header h3 {
+            margin: 0 0 5px;
+            color: var(--mc-create-title);
+            font-size: 20px;
+            letter-spacing: -0.03em;
+          }
+
+          .mc-assignment-header p {
+            margin: 0;
+            color: var(--mc-create-muted);
+            font-size: 14px;
+            line-height: 1.55;
+          }
+
+          .mc-refresh-maqueiros {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            min-height: 40px;
+            padding: 0 13px;
+            border-radius: 999px;
+            border: 1px solid var(--mc-create-border);
+            background: var(--mc-create-card);
+            color: var(--mc-create-title);
+            font-weight: 900;
+            cursor: pointer;
+          }
+
+          .mc-refresh-maqueiros:disabled {
+            opacity: 0.55;
+            cursor: not-allowed;
+          }
+
+          .mc-assignment-empty {
+            padding: 13px 15px;
+            border-radius: 17px;
+            border: 1px dashed var(--mc-create-border);
+            background: var(--mc-create-card);
+            color: var(--mc-create-muted);
+            font-size: 14px;
+            font-weight: 700;
+          }
+
+          .mc-assignment-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+            gap: 12px;
+          }
+
+          .mc-assignment-card {
+            display: flex;
+            gap: 11px;
+            align-items: flex-start;
+            padding: 14px;
+            border-radius: 20px;
+            border: 1px solid var(--mc-create-border);
+            background: var(--mc-create-card);
+            color: var(--mc-create-text);
+            cursor: pointer;
+            transition: border-color 0.18s ease, box-shadow 0.18s ease, transform 0.18s ease;
+          }
+
+          .mc-assignment-card:hover {
+            border-color: var(--mc-create-accent);
+            box-shadow: var(--mc-create-soft-shadow);
+            transform: translateY(-1px);
+          }
+
+          .mc-assignment-card.selected {
+            border-color: var(--mc-create-accent);
+            box-shadow: 0 0 0 4px rgba(20, 201, 204, 0.12);
+          }
+
+          .mc-assignment-card input {
+            margin-top: 4px;
+          }
+
+          .mc-assignment-card strong,
+          .mc-assignment-card small {
+            display: block;
+          }
+
+          .mc-assignment-card small {
+            color: var(--mc-create-muted);
+            margin-top: 3px;
+            line-height: 1.35;
+          }
+
+          .mc-assignment-tag {
+            display: inline-flex;
+            width: fit-content;
+            margin-top: 9px;
+            padding: 5px 9px;
+            border-radius: 999px;
+            background: rgba(148, 163, 184, 0.18);
+            color: var(--mc-create-muted);
+            font-size: 11px;
+            font-weight: 900;
+          }
+
+          .mc-assignment-tag.origin {
+            color: #047857;
+            background: rgba(16, 185, 129, 0.14);
+          }
+
+          .mc-assignment-tag.destination {
+            color: #1d4ed8;
+            background: rgba(59, 130, 246, 0.14);
           }
 
           .mc-form-section-header {
@@ -1262,6 +1505,7 @@ export function CreateCallScreen({ sectors, onCreated }: CreateCallScreenProps) 
             }
 
             .mc-form-section-header,
+            .mc-assignment-header,
             .mc-form-footer {
               flex-direction: column;
               align-items: flex-start;
@@ -1552,6 +1796,73 @@ export function CreateCallScreen({ sectors, onCreated }: CreateCallScreenProps) 
             </label>
           </div>
 
+          <div className="mc-form-section mc-maqueiro-select-section">
+            <div className="mc-form-section-header">
+              <div>
+                <h3>Maqueiro disponível</h3>
+                <p>Escolha quem receberá o chamado. A lista mostra somente maqueiros disponíveis e livres.</p>
+              </div>
+
+              <button
+                type="button"
+                className="mc-refresh-maqueiros"
+                onClick={loadAvailableMaqueiros}
+                disabled={loadingMaqueiros || !form.originSectorId}
+              >
+                <RefreshCw size={15} />
+                {loadingMaqueiros ? 'Atualizando...' : 'Atualizar'}
+              </button>
+            </div>
+
+            <label className="mc-field">
+              <span>Selecionar maqueiro</span>
+
+              <div className="mc-input-wrapper">
+                <UsersRound size={18} />
+
+                <select
+                  value={form.assignedMaqueiroId ?? ''}
+                  onChange={(event) => update('assignedMaqueiroId', event.target.value || null)}
+                  disabled={!form.originSectorId || loadingMaqueiros}
+                >
+                  <option value="">Criar sem atribuir</option>
+                  {availableMaqueiros.map((maqueiro) => {
+                    const tag = maqueiroTag(maqueiro);
+                    const label = `${maqueiroDisplayName(maqueiro)} — ${maqueiroSectorName(maqueiro)}${tag ? ` (${tag})` : ''}`;
+
+                    return (
+                      <option key={maqueiro.id} value={maqueiro.id}>
+                        {label}
+                      </option>
+                    );
+                  })}
+                </select>
+              </div>
+            </label>
+
+            {!form.originSectorId && (
+              <div className="mc-assignment-empty">Selecione a origem para carregar e priorizar os maqueiros do setor.</div>
+            )}
+
+            {form.originSectorId && maqueirosError && (
+              <div className="mc-error-box">{maqueirosError}</div>
+            )}
+
+            {form.originSectorId && loadingMaqueiros && (
+              <div className="mc-assignment-empty">Carregando maqueiros disponíveis...</div>
+            )}
+
+            {form.originSectorId && !loadingMaqueiros && availableMaqueiros.length === 0 && !maqueirosError && (
+              <div className="mc-assignment-empty">Nenhum maqueiro disponível agora. O chamado pode ser criado sem atribuição.</div>
+            )}
+
+            {selectedMaqueiro && (
+              <div className="mc-assignment-empty">
+                Selecionado: {maqueiroDisplayName(selectedMaqueiro)} · {maqueiroSectorName(selectedMaqueiro)}
+              </div>
+            )}
+          </div>
+
           {error && <div className="mc-error-box">{error}</div>}
 
           <div className="mc-form-footer">
@@ -1571,7 +1882,7 @@ export function CreateCallScreen({ sectors, onCreated }: CreateCallScreenProps) 
             </button>
 
             <span>
-              O chamado será distribuído automaticamente para o maqueiro disponível mais adequado.
+              Selecione um maqueiro disponível para envio imediato ou crie sem atribuir para a coordenação assumir depois.
             </span>
           </div>
         </form>

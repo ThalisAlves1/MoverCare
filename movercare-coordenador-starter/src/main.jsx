@@ -779,7 +779,7 @@ function SectorQrCard({ sector }) {
   )
 }
 
-function CallRows({ calls, maqueiros, selectedMaqueiroByCall, setSelectedMaqueiroByCall, reassignCall, loading, compact, onOpenDetails }) {
+function CallRows({ calls, maqueiros, selectedMaqueiroByCall, setSelectedMaqueiroByCall, reassignCall, loading, compact, onOpenDetails, onCancelCall }) {
   return (
     <div className={`sla-call-list ${compact ? 'compact' : ''}`}>
       {calls.length === 0 && <div className="empty-row">Nenhum chamado encontrado.</div>}
@@ -790,6 +790,7 @@ function CallRows({ calls, maqueiros, selectedMaqueiroByCall, setSelectedMaqueir
         ))
 
         const sla = getCallSla(call)
+        const canCancelCall = !['CONCLUIDO', 'CANCELADO'].includes(call.status)
 
         return (
           <article className="sla-call-card" key={call.id}>
@@ -805,6 +806,11 @@ function CallRows({ calls, maqueiros, selectedMaqueiroByCall, setSelectedMaqueir
                 <button type="button" className="call-details-chip" onClick={() => onOpenDetails?.(call.id)}>
                   Detalhes
                 </button>
+                {canCancelCall && (
+                  <button type="button" className="call-cancel-chip" onClick={() => onCancelCall?.(call)} disabled={loading}>
+                    Cancelar
+                  </button>
+                )}
               </div>
             </div>
 
@@ -901,6 +907,14 @@ function CallRows({ calls, maqueiros, selectedMaqueiroByCall, setSelectedMaqueir
               <div className="sla-observation">
                 <small>Observação</small>
                 <p>{call.observation}</p>
+              </div>
+            )}
+
+            {call.status === 'CANCELADO' && (
+              <div className="sla-observation cancel-observation">
+                <small>Motivo do cancelamento</small>
+                <p>{call.cancellation_reason || 'Motivo não informado.'}</p>
+                <small>Cancelado em {formatDateTime(call.cancelled_at)}</small>
               </div>
             )}
 
@@ -1318,7 +1332,8 @@ function CallDetailPage({
   loading,
   profile,
   refreshData,
-  onBack
+  onBack,
+  onCancelCall
 }) {
   if (!call) {
     return (
@@ -1346,6 +1361,7 @@ function CallDetailPage({
   const availableMaqueiros = maqueiros.filter(m => (
     m.status === 'DISPONIVEL' && m.id !== call.assigned_maqueiro_id
   ))
+  const canCancelCall = !['CONCLUIDO', 'CANCELADO'].includes(call.status)
 
   return (
     <>
@@ -1356,6 +1372,11 @@ function CallDetailPage({
         right={
           <div className="call-detail-header-actions">
             <button type="button" className="light-button" onClick={onBack}>Voltar</button>
+            {canCancelCall && (
+              <button type="button" className="danger cancel-call-main-button" onClick={() => onCancelCall?.(call)} disabled={loading}>
+                Cancelar chamada
+              </button>
+            )}
             <button type="button" onClick={refreshData} disabled={loading}>Atualizar</button>
           </div>
         }
@@ -1423,6 +1444,14 @@ function CallDetailPage({
               <div className="call-detail-observation">
                 <small>Observações</small>
                 <p>{call.observation}</p>
+              </div>
+            )}
+
+            {call.status === 'CANCELADO' && (
+              <div className="call-detail-observation call-detail-cancel-box">
+                <small>Motivo do cancelamento</small>
+                <p>{call.cancellation_reason || 'Motivo não informado.'}</p>
+                <small>Cancelado em {formatDateTime(call.cancelled_at)}</small>
               </div>
             )}
           </section>
@@ -2096,7 +2125,8 @@ function CallsPage({
   loading,
   profile,
   refreshData,
-  openCallDetails
+  openCallDetails,
+  onCancelCall
 }) {
   const [searchTerm, setSearchTerm] = useState('')
   const [priorityFilter, setPriorityFilter] = useState('TODOS')
@@ -2134,6 +2164,8 @@ function CallsPage({
           call.qr_origin_read_at,
           call.qr_destination_read_at,
           call.completed_at,
+          call.cancelled_at,
+          call.cancellation_reason,
           formatSeconds(getCallSla(call).acceptSeconds),
           formatSeconds(getCallSla(call).transportSeconds),
           formatSeconds(getCallSla(call).totalSeconds)
@@ -2239,6 +2271,7 @@ function CallsPage({
           reassignCall={reassignCall}
           loading={loading}
           onOpenDetails={openCallDetails}
+          onCancelCall={onCancelCall}
         />
       </section>
     </>
@@ -2507,10 +2540,52 @@ function MaqueiroProgressCard({ progress, onOpenHistory }) {
 }
 
 
-function MaqueirosPage({ maqueiros, calls, profile, refreshData, loading, registerAudit }) {
+function MaqueirosPage({ maqueiros, sectors, calls, profile, refreshData, loading, registerAudit }) {
   const [selectedMonth, setSelectedMonth] = useState(getCurrentMonthValue())
   const [historyMaqueiroId, setHistoryMaqueiroId] = useState(null)
   const selectedMonthLabel = getMonthLabel(selectedMonth)
+  const [selectedSectorByMaqueiro, setSelectedSectorByMaqueiro] = useState({})
+  const activeSectors = useMemo(() => sectors.filter(sector => sector.active !== false), [sectors])
+
+  async function updateMaqueiroCurrentSector(maqueiro) {
+    const sectorId = selectedSectorByMaqueiro[maqueiro.id] || maqueiro.current_sector_id || maqueiro.sector_id
+
+    if (!sectorId) {
+      alert('Selecione um setor para este maqueiro.')
+      return
+    }
+
+    try {
+      const { error: rpcError } = await supabase.rpc('coordinator_update_maqueiro_current_sector', {
+        p_maqueiro_id: maqueiro.id,
+        p_sector_id: sectorId
+      })
+
+      if (rpcError) {
+        console.warn('RPC coordinator_update_maqueiro_current_sector falhou. Usando fallback direto em profiles.', rpcError.message)
+
+        const { error: fallbackError } = await supabase
+          .from('profiles')
+          .update({
+            sector_id: sectorId,
+            current_sector_id: sectorId,
+            updated_at: new Date().toISOString()
+          })
+          .eq('id', maqueiro.id)
+
+        if (fallbackError) throw fallbackError
+      }
+
+      registerAudit?.('SETOR_MAQUEIRO', `Setor atual atualizado para ${maqueiro.full_name || maqueiro.email || maqueiro.id}`, profile, {
+        maqueiro_id: maqueiro.id,
+        sector_id: sectorId
+      })
+
+      await refreshData?.()
+    } catch (error) {
+      alert(error.message || 'Erro ao atualizar setor do maqueiro.')
+    }
+  }
 
   const progressList = useMemo(() => {
     return maqueiros
@@ -2818,12 +2893,13 @@ function MaqueirosPage({ maqueiros, calls, profile, refreshData, loading, regist
           </div>
         </div>
 
-        <div className="team-table">
+        <div className="team-table operational-team-table">
           <div className="team-head">
             <span>Maqueiro</span>
             <span>Setor atual</span>
             <span>Status</span>
             <span>Atualização</span>
+            <span>Alterar setor</span>
           </div>
 
           {maqueiros.length === 0 && <div className="empty-row">Nenhum maqueiro encontrado.</div>}
@@ -2840,6 +2916,29 @@ function MaqueirosPage({ maqueiros, calls, profile, refreshData, loading, regist
               <span>{m.current_sector_name || '-'}</span>
               <StatusPill value={m.status || 'SEM_STATUS'} />
               <span>{formatTime(m.updated_at)}</span>
+              <div className="maqueiro-sector-action">
+                <select
+                  value={selectedSectorByMaqueiro[m.id] || m.current_sector_id || m.sector_id || ''}
+                  onChange={(event) => setSelectedSectorByMaqueiro(prev => ({
+                    ...prev,
+                    [m.id]: event.target.value
+                  }))}
+                >
+                  <option value="">Selecionar setor</option>
+                  {activeSectors.map(sector => (
+                    <option key={sector.id} value={sector.id}>{sector.name}</option>
+                  ))}
+                </select>
+
+                <button
+                  type="button"
+                  className="small"
+                  disabled={loading || activeSectors.length === 0}
+                  onClick={() => updateMaqueiroCurrentSector(m)}
+                >
+                  Salvar
+                </button>
+              </div>
             </div>
           ))}
         </div>
@@ -2991,7 +3090,7 @@ function resolveProfileSector(profile, sectors) {
 }
 
 
-function NewCallPage({ sectors, profile, onCreated, onNavigate }) {
+function NewCallPage({ sectors, maqueiros, calls, profile, onCreated, onNavigate }) {
   const [form, setForm] = useState({
     patientCode: '',
     bedNumber: '',
@@ -3004,6 +3103,7 @@ function NewCallPage({ sectors, profile, onCreated, onNavigate }) {
     teamConfirmed: false,
     equipmentConfirmed: false,
     infectionPrecaution: 'PADRAO',
+    selectedMaqueiroId: '',
     observation: ''
   })
 
@@ -3018,6 +3118,77 @@ function NewCallPage({ sectors, profile, onCreated, onNavigate }) {
       destinationSectorId: sectors.some(sector => sector.id === prev.destinationSectorId) ? prev.destinationSectorId : ''
     }))
   }, [sectors])
+
+  const activeCallStatuses = ['ENVIADO', 'ACEITO', 'A_CAMINHO_ORIGEM', 'EM_TRANSITO']
+
+  const busyMaqueiroIds = useMemo(() => new Set(
+    (calls || [])
+      .filter(call => activeCallStatuses.includes(String(call.status || '').toUpperCase()) && call.assigned_maqueiro_id)
+      .map(call => call.assigned_maqueiro_id)
+  ), [calls])
+
+  const availableMaqueiros = useMemo(() => {
+    const originId = form.originSectorId
+    const destinationId = form.destinationSectorId
+
+    return (maqueiros || [])
+      .filter(maqueiro => {
+        const status = String(maqueiro.status || '').trim().toUpperCase()
+        const role = String(maqueiro.role || '').trim().toUpperCase()
+        return role === 'MAQUEIRO'
+          && maqueiro.active !== false
+          && status === 'DISPONIVEL'
+          && !busyMaqueiroIds.has(maqueiro.id)
+      })
+      .map(maqueiro => {
+        const currentSectorId = maqueiro.current_sector_id || maqueiro.sector_id || null
+        const sameOrigin = originId && currentSectorId === originId
+        const sameDestination = destinationId && currentSectorId === destinationId
+        const priorityRank = sameOrigin ? 1 : sameDestination ? 2 : 3
+
+        return {
+          ...maqueiro,
+          currentSectorId,
+          sameOrigin,
+          sameDestination,
+          priorityRank
+        }
+      })
+      .sort((a, b) => {
+        if (a.priorityRank !== b.priorityRank) return a.priorityRank - b.priorityRank
+        return String(a.full_name || a.name || a.email || '').localeCompare(String(b.full_name || b.name || b.email || ''))
+      })
+  }, [maqueiros, busyMaqueiroIds, form.originSectorId, form.destinationSectorId])
+
+  useEffect(() => {
+    if (form.selectedMaqueiroId && !availableMaqueiros.some(maqueiro => maqueiro.id === form.selectedMaqueiroId)) {
+      setForm(prev => ({ ...prev, selectedMaqueiroId: '' }))
+    }
+  }, [availableMaqueiros, form.selectedMaqueiroId])
+
+  function resolveCreatedCallId(rpcData) {
+    if (!rpcData) return null
+    if (typeof rpcData === 'string') return rpcData
+    if (rpcData.id) return rpcData.id
+    if (Array.isArray(rpcData) && rpcData[0]?.id) return rpcData[0].id
+    if (Array.isArray(rpcData) && typeof rpcData[0] === 'string') return rpcData[0]
+    return null
+  }
+
+  async function findCreatedCallId(patientIdentifier) {
+    const { data, error } = await supabase
+      .from('transport_calls')
+      .select('id')
+      .eq('patient_code', patientIdentifier)
+      .eq('origin_sector_id', form.originSectorId)
+      .eq('destination_sector_id', form.destinationSectorId)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle()
+
+    if (error) throw error
+    return data?.id || null
+  }
 
   function updateForm(field, value) {
     setForm(prev => ({ ...prev, [field]: value }))
@@ -3060,7 +3231,7 @@ function NewCallPage({ sectors, profile, onCreated, onNavigate }) {
         form.observation?.trim() ? form.observation.trim() : null
       ].filter(Boolean).join('\n')
 
-      const { error: rpcError } = await supabase.rpc('create_transport_call', {
+      const { data: createdCallData, error: rpcError } = await supabase.rpc('create_transport_call', {
         p_patient_code: patientIdentifier,
         p_origin_sector_id: form.originSectorId,
         p_destination_sector_id: form.destinationSectorId,
@@ -3076,7 +3247,26 @@ function NewCallPage({ sectors, profile, onCreated, onNavigate }) {
 
       if (rpcError) throw rpcError
 
-      setLocalSuccess('Chamado criado com sucesso.')
+      let createdCallId = resolveCreatedCallId(createdCallData)
+
+      if (form.selectedMaqueiroId) {
+        if (!createdCallId) {
+          createdCallId = await findCreatedCallId(patientIdentifier)
+        }
+
+        if (!createdCallId) {
+          throw new Error('Chamado criado, mas não foi possível localizar o ID para atribuição. Abra Chamados e atribua manualmente.')
+        }
+
+        const { error: assignError } = await supabase.rpc('coordinator_reassign_call', {
+          p_call_id: createdCallId,
+          p_maqueiro_id: form.selectedMaqueiroId
+        })
+
+        if (assignError) throw assignError
+      }
+
+      setLocalSuccess(form.selectedMaqueiroId ? 'Chamado criado e enviado ao maqueiro selecionado.' : 'Chamado criado sem atribuição.')
       setForm(prev => ({
         ...prev,
         patientCode: '',
@@ -3088,6 +3278,7 @@ function NewCallPage({ sectors, profile, onCreated, onNavigate }) {
         teamConfirmed: false,
         equipmentConfirmed: false,
         infectionPrecaution: 'PADRAO',
+        selectedMaqueiroId: '',
         observation: ''
       }))
 
@@ -3227,6 +3418,61 @@ function NewCallPage({ sectors, profile, onCreated, onNavigate }) {
               <option value="NAO_SE_APLICA">Não se aplica</option>
             </select>
           </label>
+
+          <div className="new-call-wide assignment-panel">
+            <div className="assignment-header">
+              <div>
+                <span>Maqueiro disponível</span>
+                <strong>Selecione quem vai receber a chamada</strong>
+              </div>
+              <button type="button" className="light-button small" onClick={onCreated}>
+                Atualizar lista
+              </button>
+            </div>
+
+            {!form.originSectorId && (
+              <div className="assignment-empty">Selecione a origem para priorizar o maqueiro dedicado ao setor.</div>
+            )}
+
+            {form.originSectorId && availableMaqueiros.length === 0 && (
+              <div className="assignment-empty">Nenhum maqueiro disponível no momento. O chamado será criado sem atribuição.</div>
+            )}
+
+            <label className={`maqueiro-select-card ${form.selectedMaqueiroId === '' ? 'selected' : ''}`}>
+              <input
+                type="radio"
+                name="selectedMaqueiroId"
+                value=""
+                checked={form.selectedMaqueiroId === ''}
+                onChange={() => updateForm('selectedMaqueiroId', '')}
+              />
+              <div>
+                <strong>Criar sem atribuir</strong>
+                <small>O chamado ficará em AGUARDANDO_MAQUEIRO para atribuição posterior.</small>
+              </div>
+            </label>
+
+            <div className="maqueiro-select-grid">
+              {availableMaqueiros.map(maqueiro => (
+                <label className={`maqueiro-select-card ${form.selectedMaqueiroId === maqueiro.id ? 'selected' : ''}`} key={maqueiro.id}>
+                  <input
+                    type="radio"
+                    name="selectedMaqueiroId"
+                    value={maqueiro.id}
+                    checked={form.selectedMaqueiroId === maqueiro.id}
+                    onChange={() => updateForm('selectedMaqueiroId', maqueiro.id)}
+                  />
+                  <div>
+                    <strong>{maqueiro.full_name || maqueiro.name || maqueiro.email || 'Maqueiro'}</strong>
+                    <small>{maqueiro.current_sector_name || maqueiro.sector_name || 'Sem setor informado'}</small>
+                    <span className={`assignment-tag ${maqueiro.sameOrigin ? 'origin' : maqueiro.sameDestination ? 'destination' : ''}`}>
+                      {maqueiro.sameOrigin ? 'Disponível no setor de origem' : maqueiro.sameDestination ? 'Disponível no setor de destino' : 'Disponível em outro setor'}
+                    </span>
+                  </div>
+                </label>
+              ))}
+            </div>
+          </div>
 
           <div className="new-call-checks">
             <label>
@@ -4427,7 +4673,7 @@ function SchedulePage({ schedules, maqueiros, sectors, profile, refreshData, reg
     <>
       <PageHeader
         title="Escala mensal"
-        subtitle="Monte plantões 12x36, selecione datas por caixa de seleção e realize trocas entre maqueiros."
+        subtitle="Planejamento mensal 12x36. A escala não bloqueia o app; o setor em tempo real é definido em Maqueiros > Alterar setor."
         profile={profile}
         right={
           <div className="filter-row">
@@ -4950,6 +5196,9 @@ function App() {
         qr_destination_read_at,
         completed_at,
         timeout_count,
+        cancellation_reason,
+        cancelled_at,
+        cancelled_by,
         origin:origin_sector_id(id, name, qr_token),
         destination:destination_sector_id(id, name, qr_token),
         maqueiro:assigned_maqueiro_id(id, full_name)
@@ -4971,65 +5220,57 @@ function App() {
     setCalls(data || [])
   }
 
-async function loadMaqueiros() {
-  setError('')
+  async function loadMaqueiros() {
+    setError('')
 
-  const normalizeMaqueiro = (m) => ({
-    ...m,
-    status: String(m.status || 'OFFLINE').trim().toUpperCase(),
-    role: String(m.role || 'MAQUEIRO').trim().toUpperCase(),
-    active: m.active !== false,
-    current_sector_id: m.current_sector_id || m.sector_id || null,
-    current_sector_name: m.current_sector_name || m.sector_name || m.sector?.name || ''
-  })
+    const normalizeMaqueiro = (m) => ({
+      ...m,
+      role: String(m.role || 'MAQUEIRO').trim().toUpperCase(),
+      status: String(m.status || 'OFFLINE').trim().toUpperCase(),
+      active: m.active !== false,
+      current_sector_id: m.current_sector_id || m.sector_id || null,
+      current_sector_name: m.current_sector_name || m.sector_name || m.current_sector?.name || m.sector?.name || '',
+      sector_name: m.sector_name || m.sector?.name || ''
+    })
 
-  const { data, error: maqueirosError } = await supabase.rpc('coordinator_get_maqueiros')
+    const { data, error: maqueirosError } = await supabase.rpc('coordinator_get_maqueiros')
 
-  if (!maqueirosError && Array.isArray(data) && data.length > 0) {
-    const normalized = data.map(normalizeMaqueiro)
-    console.log('MAQUEIROS RPC:', normalized)
-    setMaqueiros(normalized)
-    return
+    if (!maqueirosError && Array.isArray(data)) {
+      setMaqueiros(data.map(normalizeMaqueiro))
+      return
+    }
+
+    console.warn('Falha ao carregar maqueiros pela RPC. Usando fallback direto em profiles.', maqueirosError?.message || maqueirosError)
+
+    const { data: fallbackData, error: fallbackError } = await supabase
+      .from('profiles')
+      .select(`
+        id,
+        full_name,
+        name,
+        email,
+        phone,
+        role,
+        status,
+        active,
+        sector_id,
+        current_sector_id,
+        last_seen_at,
+        updated_at,
+        sector:sector_id(id, name),
+        current_sector:current_sector_id(id, name)
+      `)
+      .eq('role', 'MAQUEIRO')
+      .eq('active', true)
+      .order('full_name', { ascending: true })
+
+    if (fallbackError) {
+      setError(fallbackError.message)
+      return
+    }
+
+    setMaqueiros((fallbackData || []).map(normalizeMaqueiro))
   }
-
-  console.warn('RPC coordinator_get_maqueiros vazia ou com erro:', maqueirosError?.message || maqueirosError)
-
-  const { data: fallbackData, error: fallbackError } = await supabase
-    .from('profiles')
-    .select(`
-      id,
-      full_name,
-      name,
-      email,
-      phone,
-      role,
-      status,
-      active,
-      sector_id,
-      current_sector_id,
-      last_seen_at,
-      updated_at,
-      sector:sector_id(id, name),
-      current_sector:current_sector_id(id, name)
-    `)
-    .eq('role', 'MAQUEIRO')
-    .eq('active', true)
-    .order('full_name', { ascending: true })
-
-  if (fallbackError) {
-    setError(fallbackError.message)
-    return
-  }
-
-  const normalizedFallback = (fallbackData || []).map((m) => normalizeMaqueiro({
-    ...m,
-    sector_name: m.sector?.name || '',
-    current_sector_name: m.current_sector?.name || m.sector?.name || ''
-  }))
-
-  console.log('MAQUEIROS FALLBACK:', normalizedFallback)
-  setMaqueiros(normalizedFallback)
-}
 
 
 
@@ -5394,6 +5635,61 @@ async function loadMaqueiros() {
     setLoading(false)
   }
 
+
+  async function cancelCall(callOrId) {
+    const call = typeof callOrId === 'object'
+      ? callOrId
+      : calls.find(item => item.id === callOrId)
+
+    if (!call?.id) {
+      setError('Chamado não encontrado para cancelamento.')
+      return
+    }
+
+    if (['CONCLUIDO', 'CANCELADO'].includes(call.status)) {
+      setError('Não é possível cancelar chamado concluído ou já cancelado.')
+      return
+    }
+
+    const reason = window.prompt(`Informe o motivo do cancelamento do chamado #${call.number || call.id}:`)
+
+    if (reason === null) return
+
+    const cleanReason = String(reason || '').trim()
+
+    if (cleanReason.length < 5) {
+      alert('Informe um motivo com pelo menos 5 caracteres.')
+      return
+    }
+
+    setLoading(true)
+    setError('')
+    setSuccess('')
+
+    const { error: rpcError } = await supabase.rpc('cancel_transport_call', {
+      p_call_id: call.id,
+      p_reason: cleanReason
+    })
+
+    if (rpcError) {
+      setError(rpcError.message)
+      setLoading(false)
+      return
+    }
+
+    registerAudit('CANCELAMENTO', `Cancelou chamado #${call.number || call.id}`, {
+      callId: call.id,
+      reason: cleanReason
+    })
+
+    setSelectedCallId(null)
+    setActivePage('calls')
+    setSuccess('Chamado cancelado com sucesso.')
+    await refreshData()
+    setLoading(false)
+    window.setTimeout(() => setSuccess(''), 2800)
+  }
+
   function openCallDetails(callId) {
     setSelectedCallId(callId)
     setActivePage('call-detail')
@@ -5662,6 +5958,7 @@ async function loadMaqueiros() {
               profile={profile}
               refreshData={refreshData}
               openCallDetails={openCallDetails}
+              onCancelCall={cancelCall}
             />
           )}
 
@@ -5676,12 +5973,15 @@ async function loadMaqueiros() {
               profile={profile}
               refreshData={refreshData}
               onBack={() => setActivePage('calls')}
+              onCancelCall={cancelCall}
             />
           )}
 
           {activePage === 'newcall' && (
             <NewCallPage
               sectors={sectors}
+              maqueiros={maqueiros}
+              calls={calls}
               profile={profile}
               onCreated={refreshData}
               onNavigate={setActivePage}
@@ -5691,6 +5991,7 @@ async function loadMaqueiros() {
           {activePage === 'maqueiros' && (
             <MaqueirosPage
               maqueiros={maqueiros}
+              sectors={sectors}
               calls={calls}
               profile={profile}
               refreshData={refreshData}

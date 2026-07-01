@@ -1,5 +1,5 @@
 import { supabase } from '../lib/supabase';
-import type { CreateCallForm, Profile, Sector, TransportCall } from '../types/movercare';
+import type { CreateCallForm, MaqueiroOption, Profile, Sector, TransportCall } from '../types/movercare';
 
 export async function signIn(email: string, password: string) {
   const { data, error } = await supabase.auth.signInWithPassword({ email, password });
@@ -43,6 +43,62 @@ export async function getSectors(): Promise<Sector[]> {
   return (data ?? []) as Sector[];
 }
 
+
+export async function getAvailableMaqueirosForCall(
+  originSectorId?: string | null,
+  destinationSectorId?: string | null
+): Promise<MaqueiroOption[]> {
+  const params = {
+    p_origin_sector_id: originSectorId || null,
+    p_destination_sector_id: destinationSectorId || null,
+  };
+
+  let result = await supabase.rpc('get_available_maqueiros_for_call', params);
+
+  if (result.error) {
+    result = await supabase.rpc('coordinator_get_available_maqueiros_for_call', params);
+  }
+
+  if (result.error) throw result.error;
+
+  return ((result.data ?? []) as MaqueiroOption[]).map((maqueiro) => ({
+    ...maqueiro,
+    status: String(maqueiro.status || 'OFFLINE').trim().toUpperCase(),
+    active: maqueiro.active !== false,
+  }));
+}
+
+function resolveCreatedCallId(data: unknown): string | null {
+  if (!data) return null;
+  if (typeof data === 'string') return data;
+  if (Array.isArray(data)) {
+    const first = data[0] as any;
+    if (typeof first === 'string') return first;
+    return first?.id ?? null;
+  }
+
+  return (data as any)?.id ?? null;
+}
+
+async function findCreatedCallId(
+  patientIdentifier: string,
+  originSectorId: string,
+  destinationSectorId: string
+): Promise<string | null> {
+  const { data, error } = await supabase
+    .from('transport_calls')
+    .select('id')
+    .eq('patient_code', patientIdentifier)
+    .eq('origin_sector_id', originSectorId)
+    .eq('destination_sector_id', destinationSectorId)
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (error) throw error;
+  return data?.id ?? null;
+}
+
 export async function createTransportCall(form: CreateCallForm): Promise<TransportCall> {
   const patientNameOrCode = form.patientCode.trim();
   const bedNumber = form.bedNumber.trim();
@@ -68,6 +124,30 @@ export async function createTransportCall(form: CreateCallForm): Promise<Transpo
   });
 
   if (error) throw error;
+
+  if (form.assignedMaqueiroId) {
+    let createdCallId = resolveCreatedCallId(data);
+
+    if (!createdCallId) {
+      createdCallId = await findCreatedCallId(
+        patientIdentifier,
+        form.originSectorId,
+        form.destinationSectorId
+      );
+    }
+
+    if (!createdCallId) {
+      throw new Error('Chamado criado, mas não foi possível localizar o ID para enviar ao maqueiro. Atribua pela coordenação.');
+    }
+
+    const { error: assignError } = await supabase.rpc('assign_call_to_selected_maqueiro', {
+      p_call_id: createdCallId,
+      p_maqueiro_id: form.assignedMaqueiroId,
+    });
+
+    if (assignError) throw assignError;
+  }
+
   return data as TransportCall;
 }
 

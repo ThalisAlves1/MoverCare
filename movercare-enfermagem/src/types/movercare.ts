@@ -18,7 +18,9 @@ export interface Profile {
   full_name: string;
   role: UserRole;
   active: boolean;
+  status?: string | null;
   sector_id?: string | null;
+  current_sector_id?: string | null;
   email?: string | null;
   phone?: string | null;
   telefone?: string | null;
@@ -34,6 +36,26 @@ export interface Sector {
   order_position: number;
   active: boolean;
   qr_token?: string;
+}
+
+
+export interface MaqueiroOption {
+  id: string;
+  full_name?: string | null;
+  name?: string | null;
+  email?: string | null;
+  phone?: string | null;
+  status: string;
+  active: boolean;
+  current_sector_id?: string | null;
+  current_sector_name?: string | null;
+  sector_id?: string | null;
+  sector_name?: string | null;
+  same_origin_sector?: boolean | null;
+  same_destination_sector?: boolean | null;
+  priority_rank?: number | null;
+  last_seen_at?: string | null;
+  updated_at?: string | null;
 }
 
 export interface TransportCall {
@@ -78,5 +100,6 @@ export interface CreateCallForm {
   teamConfirmed: boolean;
   equipmentConfirmed: boolean;
   infectionPrecaution: string;
+  assignedMaqueiroId?: string | null;
   observation: string;
 }

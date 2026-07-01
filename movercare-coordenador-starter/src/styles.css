@@ -6382,3 +6382,182 @@ button {
     min-width: 760px;
   }
 }
+
+/* Estabilização operacional: setor atual do maqueiro definido pelo coordenador */
+.operational-team-table .team-head,
+.operational-team-table .team-row {
+  grid-template-columns: 1.35fr 1fr 140px 120px minmax(260px, 1.1fr) !important;
+}
+
+.maqueiro-sector-action {
+  display: grid;
+  grid-template-columns: minmax(160px, 1fr) auto;
+  gap: 8px;
+  align-items: center;
+}
+
+.maqueiro-sector-action select {
+  min-height: 38px;
+  padding: 8px 10px;
+  font-size: 12px;
+}
+
+.maqueiro-sector-action button {
+  min-height: 38px;
+  white-space: nowrap;
+}
+
+@media (max-width: 1120px) {
+  .operational-team-table .team-head,
+  .operational-team-table .team-row {
+    min-width: 1080px !important;
+  }
+}
+
+
+/* Cancelamento de chamados - estabilização */
+.call-cancel-chip {
+  background: #fff1f2 !important;
+  color: #dc2626 !important;
+  border: 1px solid #fecaca !important;
+  border-radius: 999px !important;
+  padding: 7px 10px !important;
+  font-size: 12px !important;
+  font-weight: 700 !important;
+}
+
+.call-cancel-chip:hover {
+  background: #fee2e2 !important;
+}
+
+.cancel-call-main-button {
+  background: #dc2626 !important;
+  color: #ffffff !important;
+}
+
+.cancel-call-main-button:hover {
+  background: #b91c1c !important;
+}
+
+.cancel-observation,
+.call-detail-cancel-box {
+  border-color: #fecaca !important;
+  background: #fff1f2 !important;
+}
+
+.cancel-observation small,
+.call-detail-cancel-box small {
+  color: #b91c1c !important;
+  font-weight: 700 !important;
+}
+
+.cancel-observation p,
+.call-detail-cancel-box p {
+  color: #7f1d1d !important;
+}
+
+/* Seleção manual de maqueiro no novo chamado */
+.assignment-panel {
+  border: 1px solid rgba(15, 23, 42, 0.12);
+  border-radius: 18px;
+  padding: 16px;
+  background: rgba(248, 250, 252, 0.82);
+}
+
+.assignment-header {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: center;
+  margin-bottom: 12px;
+}
+
+.assignment-header span {
+  display: block;
+  font-size: 0.78rem;
+  color: #64748b;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  margin-bottom: 3px;
+}
+
+.assignment-header strong {
+  display: block;
+  color: #0f172a;
+}
+
+.assignment-empty {
+  border: 1px dashed rgba(15, 23, 42, 0.18);
+  border-radius: 14px;
+  padding: 12px;
+  color: #64748b;
+  background: #ffffff;
+  margin-bottom: 10px;
+}
+
+.maqueiro-select-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+  gap: 10px;
+  margin-top: 10px;
+}
+
+.maqueiro-select-card {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  border: 1px solid rgba(15, 23, 42, 0.14);
+  border-radius: 15px;
+  padding: 12px;
+  background: #ffffff;
+  cursor: pointer;
+  transition: border-color 0.18s ease, box-shadow 0.18s ease, transform 0.18s ease;
+}
+
+.maqueiro-select-card:hover {
+  border-color: rgba(14, 165, 233, 0.45);
+  box-shadow: 0 10px 22px rgba(15, 23, 42, 0.08);
+  transform: translateY(-1px);
+}
+
+.maqueiro-select-card.selected {
+  border-color: #0ea5e9;
+  box-shadow: 0 0 0 3px rgba(14, 165, 233, 0.14);
+}
+
+.maqueiro-select-card input {
+  margin-top: 4px;
+}
+
+.maqueiro-select-card strong,
+.maqueiro-select-card small {
+  display: block;
+}
+
+.maqueiro-select-card small {
+  color: #64748b;
+  margin-top: 2px;
+}
+
+.assignment-tag {
+  display: inline-flex;
+  align-items: center;
+  width: fit-content;
+  margin-top: 8px;
+  padding: 4px 8px;
+  border-radius: 999px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: #475569;
+  background: #e2e8f0;
+}
+
+.assignment-tag.origin {
+  color: #065f46;
+  background: #d1fae5;
+}
+
+.assignment-tag.destination {
+  color: #1d4ed8;
+  background: #dbeafe;
+}
